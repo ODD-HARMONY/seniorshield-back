@@ -1,0 +1,8 @@
+.env
+cookies.txt
+**/target/
+**/*.class
+**/__pycache__/
+**/*.pyc
+db-data/
+work-data/

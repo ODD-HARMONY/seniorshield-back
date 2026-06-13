@@ -1,0 +1,72 @@
+package com.seniorshield.client;
+
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.seniorshield.model.ClassifyResult;
+import com.seniorshield.model.ImageResult;
+import com.seniorshield.model.InfoResult;
+import com.seniorshield.util.JsonUtil;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.List;
+
+public class AnalyzerClient {
+    private static final String URL;
+    private static final long   TIMEOUT_MS;
+
+    static {
+        String u = System.getenv("ANALYZER_URL");
+        URL = u != null ? u : "http://localhost:8001";
+        String t = System.getenv("ANALYZER_TIMEOUT_MS");
+        TIMEOUT_MS = t != null ? Long.parseLong(t) : 20_000L;
+    }
+
+    private static final HttpClient HTTP = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
+
+    public ClassifyResult classify(String subtitleText) throws Exception {
+        String body = JsonUtil.MAPPER.writeValueAsString(
+                JsonUtil.MAPPER.createObjectNode().put("subtitle_text", subtitleText));
+        return post("/classify", body, ClassifyResult.class);
+    }
+
+    public InfoResult info(String subtitleText, String category) throws Exception {
+        String body = JsonUtil.MAPPER.writeValueAsString(
+                JsonUtil.MAPPER.createObjectNode()
+                        .put("subtitle_text", subtitleText)
+                        .put("category", category));
+        return post("/info", body, InfoResult.class);
+    }
+
+    public ImageResult image(List<String> framesBase64) throws Exception {
+        ArrayNode arr = JsonUtil.MAPPER.createArrayNode();
+        framesBase64.forEach(arr::add);
+        String body = JsonUtil.MAPPER.writeValueAsString(
+                JsonUtil.MAPPER.createObjectNode().set("frames_base64", arr));
+        return post("/image", body, ImageResult.class);
+    }
+
+    public String healthRaw() throws Exception {
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(URL + "/health"))
+                .GET().timeout(Duration.ofSeconds(5)).build();
+        return HTTP.send(req, HttpResponse.BodyHandlers.ofString()).body();
+    }
+
+    private <T> T post(String path, String body, Class<T> type) throws Exception {
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(URL + path))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .timeout(Duration.ofMillis(TIMEOUT_MS))
+                .build();
+        HttpResponse<String> resp = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() >= 400) throw new RuntimeException("Analyzer error " + path + ": " + resp.body());
+        return JsonUtil.MAPPER.readValue(resp.body(), type);
+    }
+}

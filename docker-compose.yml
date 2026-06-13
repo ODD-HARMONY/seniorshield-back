@@ -1,0 +1,102 @@
+services:
+  gateway:
+    build: ./gateway
+    container_name: ss-gateway
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      EXTRACTOR_URL: "http://extractor:8000"
+      ANALYZER_URL: "http://analyzer:8001"
+      FACTCHECK_URL: "http://factcheck:8002"
+      DB_URL: "jdbc:mariadb://mariadb:3306/${MARIADB_DATABASE}"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      extractor:
+        condition: service_healthy
+      analyzer:
+        condition: service_healthy
+      factcheck:
+        condition: service_healthy
+    networks: [ss-net]
+    restart: unless-stopped
+
+  extractor:
+    build: ./extractor
+    container_name: ss-extractor
+    expose: ["8000"]
+    env_file: .env
+    environment:
+      WORK_DIR: "/data/work"
+      COOKIE_FILE: "/cookies/cookies.txt"
+    volumes:
+      - work-data:/data/work
+      - ./cookies.txt:/cookies/cookies.txt
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    networks: [ss-net]
+    restart: unless-stopped
+
+  analyzer:
+    build: ./analyzer
+    container_name: ss-analyzer
+    expose: ["8001"]
+    env_file: .env
+    volumes:
+      - ./prompts:/app/app/prompts:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks: [ss-net]
+    restart: unless-stopped
+
+  factcheck:
+    build: ./factcheck
+    container_name: ss-factcheck
+    expose: ["8002"]
+    env_file: .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks: [ss-net]
+    restart: unless-stopped
+
+  mariadb:
+    image: mariadb:11
+    container_name: ss-mariadb
+    env_file: .env
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks: [ss-net]
+    restart: unless-stopped
+
+volumes:
+  work-data:
+  db-data:
+
+networks:
+  ss-net:
+    driver: bridge
