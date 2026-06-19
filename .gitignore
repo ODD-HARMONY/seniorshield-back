@@ -1,5 +1,6 @@
 .env
 cookies.txt
+nginx/certs/
 **/target/
 **/*.class
 **/__pycache__/

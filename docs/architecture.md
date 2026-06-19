@@ -4,8 +4,16 @@
 
 ```
 Android 앱
-    │  HTTP (JSON)
+    │  HTTPS (JSON)  ← SSL 사용 시
+    │  HTTP  (JSON)  ← 로컬/개발 환경
     ▼
+┌─────────────────────────────────────────┐
+│   nginx  (선택 / --profile ssl)         │
+│   :80 → 443 리디렉트                    │
+│   :443 TLS 종단 → gateway:8080 프록시   │
+└──────────────────┬──────────────────────┘
+                   │ HTTP (내부)
+                   ▼
 ┌─────────────────────────────────────────────────────────┐
 │              Gateway  (Tomcat 9.0 / Java 11)            │
 │                        :8080                            │
@@ -40,11 +48,21 @@ Android 앱
 ```
 
 모든 서비스는 `docker compose`로 `ss-net` 브리지 네트워크 위에서 실행됩니다.  
-extractor / analyzer / factcheck는 내부 포트만 노출 (`expose`)하고, 외부에서는 gateway(8080)로만 접근합니다.
+extractor / analyzer / factcheck는 내부 포트만 노출 (`expose`)하고, 외부에서는 gateway(8080) 또는 nginx(443)를 통해서만 접근합니다.  
+nginx는 `--profile ssl` 옵션을 붙일 때만 실행되는 선택적 서비스입니다.
 
 ---
 
 ## 2. 서비스별 역할
+
+### 2.0 nginx (선택 / `--profile ssl`)
+
+Let's Encrypt 인증서를 사용한 TLS 종단 처리를 담당합니다.
+
+- `:80` → `:443` 영구 리디렉트
+- `:443` SSL 종단 후 `gateway:8080`으로 역방향 프록시
+- 인증서는 `nginx/certs/` 폴더에 복사해서 사용 (`.gitignore` 적용)
+- `docker compose up -d` 만으로는 실행되지 않으며, `--profile ssl`을 명시해야 활성화됨
 
 ### 2.1 gateway (Tomcat 9.0 / Java 11)
 
@@ -144,11 +162,15 @@ POST /api/analyze
 
 | 단계 | 소요 | 비고 |
 |------|------|------|
-| extract | ~3초 | yt-dlp + ffmpeg |
-| classify | ~5–15초 | Gemini API 응답 지연 |
-| image | ~7–20초 | 멀티모달, classify와 병렬 |
-| factcheck | ~0–2초 | 주장 없으면 스킵 |
-| **합계** | **~15–25초** | 캐시 히트 시 <1초 |
+| extract | ~2–3초 | yt-dlp + ffmpeg |
+| classify | ~1–6초 | `gemini-3.1-flash-lite` 기준 ~1초, `gemini-3.5-flash` 기준 ~4–6초 |
+| info | ~2–4초 | `gemini-2.5-flash-lite` 기준 ~2–4초, image와 병렬 실행 |
+| image | ~7–10초 | `gemini-3.5-flash` 기준, 병렬 블록의 병목 |
+| factcheck | ~1–2초/주장 | 주장 없으면 스킵 |
+| **합계 (/api/analyze)** | **~18–25초** | 캐시 히트 시 <1초 |
+
+> image와 info가 병렬 처리되므로 전체 소요는 `extract + classify + max(image, info) + factcheck`로 결정됩니다.  
+> classify 모델을 빠르게 교체해도 image가 병목이면 전체 시간 단축 효과가 제한됩니다.
 
 ---
 
@@ -199,7 +221,7 @@ POST /api/analyze
 
 ```
 seniorShield_back/
-├── docker-compose.yml          # 5개 서비스 정의
+├── docker-compose.yml          # 6개 서비스 정의 (nginx는 --profile ssl 시에만 활성화)
 ├── .env                        # API 키 및 설정 (gitignore)
 ├── .env.example                # 설정 템플릿
 ├── cookies.txt                 # YouTube 쿠키 (gitignore)
@@ -245,6 +267,12 @@ seniorShield_back/
 │       ├── 01_schema.sql       # analysis_cache 테이블
 │       └── 02_suspicion.sql    # suspicion_reports, suspicion_aggregate 테이블
 │
+├── nginx/                      # HTTPS 설정 (--profile ssl 사용 시)
+│   ├── nginx.conf              # 80→443 리디렉트 + 역방향 프록시 설정
+│   └── certs/                  # Let's Encrypt 인증서 (gitignore)
+│       ├── fullchain.pem
+│       └── privkey.pem
+│
 ├── prompts/                    # Gemini 프롬프트 (볼륨 마운트, 재빌드 없이 교체 가능)
 │   ├── subtitle_classify.txt
 │   ├── info_extract.txt
@@ -267,3 +295,5 @@ seniorShield_back/
 | URL → SHA-256 해시 캐싱 | DB에 원본 URL 미저장으로 개인정보 보호 |
 | 두 개의 suspicion 테이블 | 원본 로그(reports)와 집계(aggregate) 분리로 조회 성능 최적화 |
 | HikariCP `setDriverClassName` | Tomcat WebApp 클래스로더에서 `DriverManager`가 WAR 내 MariaDB 드라이버를 자동 탐지하지 못하는 문제 해결 |
+| nginx Docker Compose profile | SSL이 선택사항이므로 `--profile ssl` 없이 실행하면 nginx가 기동되지 않아 인증서 없는 환경에서도 오류 없이 구동 |
+| nginx에서 TLS 종단 | gateway(Tomcat)는 HTTP만 처리하고 SSL을 nginx에 위임하여 인증서 관리와 애플리케이션 로직을 분리 |

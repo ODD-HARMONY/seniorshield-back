@@ -9,12 +9,13 @@
 
 ## 요구사항
 
-| 항목 | 버전 |
-|------|------|
-| Docker | 24 이상 |
-| Docker Compose | v2 이상 (`docker compose`) |
-| Gemini API 키 | [Google AI Studio](https://aistudio.google.com/) 에서 발급 |
-| Google Fact Check Tools API 키 | [Google Cloud Console](https://console.cloud.google.com/) 에서 발급 (선택) |
+| 항목 | 필수 | 비고 |
+|------|------|------|
+| Docker 24 이상 | ✅ | |
+| Docker Compose v2 이상 | ✅ | |
+| Gemini API 키 | ✅ | [Google AI Studio](https://aistudio.google.com/) 에서 발급 |
+| Google Fact Check Tools API 키 | 선택 | 없으면 팩트체크 단계 스킵 |
+| SSL 인증서 (Let's Encrypt) | 선택 | HTTPS 운영 시 필요. 로컬/개발 환경은 불필요 |
 
 ---
 
@@ -70,6 +71,41 @@ docker compose up -d
 ```bash
 curl http://localhost:8080/api/health
 ```
+
+---
+
+## HTTPS 설정 (선택)
+
+도메인과 SSL 인증서가 있을 때 HTTPS로 운영할 수 있습니다.  
+인증서 없이도 HTTP(`localhost:8080`)로 정상 동작합니다.
+
+### 1. Let's Encrypt 인증서 발급
+
+```bash
+sudo certbot certonly --standalone -d your-domain.com
+```
+
+### 2. 인증서를 프로젝트에 복사
+
+```bash
+sudo mkdir -p ./nginx/certs
+sudo cp /etc/letsencrypt/live/your-domain.com/*.pem ./nginx/certs/
+sudo chown $USER:$USER ./nginx/certs/*.pem
+```
+
+### 3. nginx.conf 도메인 수정
+
+[`nginx/nginx.conf`](nginx/nginx.conf) 에서 `server_name`을 자신의 도메인으로 변경합니다.
+
+### 4. SSL 프로필로 실행
+
+```bash
+docker compose --profile ssl up -d
+```
+
+nginx 컨테이너가 추가로 실행되며 80→443 리디렉트와 HTTPS 프록시가 활성화됩니다.
+
+> 인증서 갱신 방법은 [`../SSL 인증서 갱신.md`](../SSL%20인증서%20갱신.md) 참고.
 
 ```json
 {
@@ -262,3 +298,5 @@ docker compose exec mariadb mariadb -u root -p${MARIADB_ROOT_PASSWORD} ${MARIADB
 | `image` 단계 타임아웃 | Gemini 응답 지연 | `ANALYZER_TIMEOUT_MS=60000`으로 증가 |
 | `db: unavailable` | MariaDB 연결 실패 | `docker compose logs mariadb` 확인 |
 | 같은 URL 재분석 시 캐시 반환 | 정상 동작 | 강제 재분석 필요 시 DB에서 `DELETE FROM analysis_cache WHERE url_hash = ?` |
+| HTTPS 접속 안 됨 | nginx가 실행되지 않음 | `docker compose --profile ssl up -d` 로 실행했는지 확인 |
+| SSL 인증서 오류 | 인증서 만료 또는 경로 불일치 | `nginx/certs/` 재복사 후 `docker compose restart nginx` |
