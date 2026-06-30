@@ -6,17 +6,13 @@
          version="4.0">
   <display-name>SeniorShield Gateway</display-name>
 
-  <!-- §5.2: Rate limit filter — /api/suspicion POST에만 적용 -->
+  <!-- Rate limit filter — /api/vote POST에 적용 (1분 10건/client_id) -->
   <filter>
     <filter-name>RateLimitFilter</filter-name>
     <filter-class>com.seniorshield.filter.RateLimitFilter</filter-class>
   </filter>
   <filter-mapping>
     <filter-name>RateLimitFilter</filter-name>
-    <url-pattern>/api/suspicion/*</url-pattern>
-  </filter-mapping>
-  <filter-mapping>
-    <filter-name>RateLimitFilter</filter-name>
-    <url-pattern>/api/suspicion</url-pattern>
+    <url-pattern>/api/vote</url-pattern>
   </filter-mapping>
 </web-app>

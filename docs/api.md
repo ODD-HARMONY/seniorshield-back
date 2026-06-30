@@ -13,8 +13,8 @@
 ## 목차
 
 1. [POST /api/analyze](#1-post-apianalyze--전체-분석-메인)
-2. [POST /api/suspicion](#2-post-apisuspicion--의심-신고)
-3. [GET /api/suspicion](#3-get-apisuspicion--의심-카운트-조회)
+2. [POST /api/vote](#2-post-apivote--투표-제출)
+3. [GET /api/vote](#3-get-apivote--투표-결과-조회)
 4. [GET /api/health](#4-get-apihealth--상태-확인)
 5. [POST /api/extract](#5-post-apiextract--자막--프레임-추출-디버그용)
 6. [POST /api/classify](#6-post-apiclassify--자막-분류-디버그용)
@@ -75,7 +75,8 @@ POST /api/analyze
       "applicable": false
     },
     "community_signal": {
-      "suspicion_count": 0,
+      "ok_count": 10,
+      "suspicious_count": 3,
       "threshold_reached": "none"
     },
     "display_message": "특별한 위험 신호가 없어요"
@@ -114,8 +115,9 @@ POST /api/analyze
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| `suspicion_count` | int | 누적 의심 신고 수 |
-| `threshold_reached` | string | `none` / `low` (≥5) / `high` (≥20) |
+| `ok_count` | int | "괜찮아요" 투표 수 |
+| `suspicious_count` | int | "이상해요" 투표 수 |
+| `threshold_reached` | string | `none` / `low` (이상해요 ≥5) / `high` (이상해요 ≥20) |
 
 **display_message** (고령층 표시용 한 줄 메시지)
 
@@ -159,26 +161,28 @@ POST /api/analyze
 
 ---
 
-## 2. POST /api/suspicion — 의심 신고
+## 2. POST /api/vote — 투표 제출
 
-사용자가 "이 영상 이상해요" 버튼을 누를 때 호출합니다.  
-같은 `client_id`로 같은 URL을 중복 신고하면 카운트를 올리지 않고 `already_reported: true`를 반환합니다.
+"괜찮아요" 또는 "이상해요" 버튼을 누를 때 호출합니다.  
+1인 1표 원칙이며, 이미 투표한 경우 다른 타입으로 변경할 수 있습니다.
 
 ### 요청
 
 ```
-POST /api/suspicion
+POST /api/vote
 ```
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | `url` | string | ✅ | 유튜브 쇼츠 URL |
 | `client_id` | string | ✅ | 앱 설치 시 생성한 UUID를 SHA-256 해싱한 64자 hex 문자열 |
+| `vote_type` | string | ✅ | `"ok"` (괜찮아요) 또는 `"suspicious"` (이상해요) |
 
 ```json
 {
   "url": "https://www.youtube.com/shorts/h5W4XNHR8BU",
-  "client_id": "a3f1c2b4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2"
+  "client_id": "a3f1c2b4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2",
+  "vote_type": "ok"
 }
 ```
 
@@ -196,8 +200,11 @@ POST /api/suspicion
 {
   "ok": true,
   "url": "https://www.youtube.com/watch?v=h5W4XNHR8BU",
-  "suspicion_count": 3,
-  "already_reported": false
+  "vote_type": "ok",
+  "ok_count": 1,
+  "suspicious_count": 0,
+  "already_voted": false,
+  "changed": false
 }
 ```
 
@@ -205,14 +212,18 @@ POST /api/suspicion
 |------|------|------|
 | `ok` | bool | 항상 `true` |
 | `url` | string | 정규화된 URL |
-| `suspicion_count` | int | 신고 후 현재 누적 카운트 |
-| `already_reported` | bool | 같은 client_id가 이미 신고했으면 `true` |
+| `vote_type` | string | 이번 투표 타입 |
+| `ok_count` | int | 투표 후 현재 "괜찮아요" 수 |
+| `suspicious_count` | int | 투표 후 현재 "이상해요" 수 |
+| `already_voted` | bool | 동일 타입으로 이미 투표한 경우 `true` (카운트 변화 없음) |
+| `changed` | bool | 이전 투표에서 타입을 변경한 경우 `true` |
 
 ### 응답 (400)
 
 ```json
 { "error": "invalid_url" }
-{ "error": "missing_client_id" }
+{ "error": "missing_client_id", "detail": "64자 hex 문자열이어야 합니다" }
+{ "error": "invalid_vote_type", "detail": "ok 또는 suspicious 만 허용됩니다" }
 ```
 
 ### 응답 (429) — Rate Limit 초과
@@ -225,18 +236,18 @@ POST /api/suspicion
 
 ---
 
-## 3. GET /api/suspicion — 의심 카운트 조회
+## 3. GET /api/vote — 투표 결과 조회
 
-특정 URL의 누적 의심 신고 수를 조회합니다.
+특정 URL의 투표 집계 결과를 조회합니다. 프론트에서 직접 가공해 표시합니다.
 
 ### 요청
 
 ```
-GET /api/suspicion?url={URL인코딩된_유튜브URL}
+GET /api/vote?url={URL인코딩된_유튜브URL}
 ```
 
 ```bash
-curl "https://kimanyfootcleaner.asuscomm.com/api/suspicion?url=https%3A%2F%2Fwww.youtube.com%2Fshorts%2Fh5W4XNHR8BU"
+curl "https://kimanyfootcleaner.asuscomm.com/api/vote?url=https%3A%2F%2Fwww.youtube.com%2Fshorts%2Fh5W4XNHR8BU"
 ```
 
 ### 응답 (200)
@@ -244,16 +255,18 @@ curl "https://kimanyfootcleaner.asuscomm.com/api/suspicion?url=https%3A%2F%2Fwww
 ```json
 {
   "url": "https://www.youtube.com/watch?v=h5W4XNHR8BU",
-  "suspicion_count": 3,
-  "last_reported_at": "2026-06-17T01:08:29"
+  "ok_count": 10,
+  "suspicious_count": 3,
+  "last_voted_at": "2026-06-30T06:06:43Z"
 }
 ```
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | `url` | string | 정규화된 URL |
-| `suspicion_count` | int | 누적 신고 수. 신고 없으면 `0` |
-| `last_reported_at` | string \| null | 마지막 신고 시각 (ISO 8601). 신고 없으면 `null` |
+| `ok_count` | int | "괜찮아요" 누적 수. 투표 없으면 `0` |
+| `suspicious_count` | int | "이상해요" 누적 수. 투표 없으면 `0` |
+| `last_voted_at` | string \| null | 마지막 투표 시각 (ISO 8601). 투표 없으면 `null` |
 
 ---
 
@@ -476,7 +489,8 @@ Google Fact Check Tools API로 주장의 팩트체크 결과를 조회합니다.
 |------|-----------|---------|
 | 400 | `invalid_url` | YouTube URL이 아니거나 형식 오류 |
 | 400 | `missing_client_id` | client_id 누락 또는 64자 hex 형식 불일치 |
-| 400 | `missing url parameter` | GET 요청에 url 파라미터 없음 |
+| 400 | `invalid_vote_type` | vote_type이 `ok` / `suspicious` 이외의 값 |
+| 400 | `missing_url_parameter` | GET 요청에 url 파라미터 없음 |
 | 429 | `rate_limit_exceeded` | 같은 client_id로 1분에 10건 초과 |
 | 502 | `extractor_timeout` | YouTube 영상 추출 실패 (봇 차단 등) |
 | 502 | `extractor_error` | extractor 서비스 오류 |

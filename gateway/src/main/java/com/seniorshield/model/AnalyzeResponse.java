@@ -29,8 +29,9 @@ public class AnalyzeResponse {
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class CommunitySignal {
-        @JsonProperty("suspicion_count")    public int    suspicionCount;
-        @JsonProperty("threshold_reached")  public String thresholdReached;
+        @JsonProperty("ok_count")          public int    okCount;
+        @JsonProperty("suspicious_count")  public int    suspiciousCount;
+        @JsonProperty("threshold_reached") public String thresholdReached;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

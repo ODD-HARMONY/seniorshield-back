@@ -116,15 +116,16 @@ public class ResultAggregator {
         return result;
     }
 
-    /** §3: 집단지성 가중치 결합 — aggregate() 호출 후 적용 */
-    public void applySuspicionWeight(AnalyzeResponse.Verdict v, int count) {
+    /** 집단지성 가중치 결합 — aggregate() 호출 후 적용. suspicious_count 기준으로 threshold 판단 */
+    public void applySuspicionWeight(AnalyzeResponse.Verdict v, int okCount, int suspiciousCount) {
         final int LOW  = 5;
         final int HIGH = 20;
 
         AnalyzeResponse.CommunitySignal cs = new AnalyzeResponse.CommunitySignal();
-        cs.suspicionCount = count;
+        cs.okCount         = okCount;
+        cs.suspiciousCount = suspiciousCount;
 
-        if (count >= HIGH) {
+        if (suspiciousCount >= HIGH) {
             cs.thresholdReached = "high";
             if (v.misinformation != null && v.misinformation.confidence != null) {
                 v.misinformation.confidence = Math.min(1.0, v.misinformation.confidence + 0.20);
@@ -133,7 +134,7 @@ public class ResultAggregator {
             }
             if (v.aiGenerated != null)
                 v.aiGenerated.confidence = Math.min(1.0, v.aiGenerated.confidence + 0.10);
-        } else if (count >= LOW) {
+        } else if (suspiciousCount >= LOW) {
             cs.thresholdReached = "low";
             if (v.misinformation != null && v.misinformation.confidence != null) {
                 v.misinformation.confidence = Math.min(1.0, v.misinformation.confidence + 0.10);
@@ -145,8 +146,7 @@ public class ResultAggregator {
         }
 
         v.communitySignal = cs;
-        // display_message 재계산 (가중치 반영 후)
-        v.displayMessage = buildMessage(v.aiGenerated, v.misinformation);
+        v.displayMessage  = buildMessage(v.aiGenerated, v.misinformation);
     }
 
     /** §9.3 display_message 규칙 표 */

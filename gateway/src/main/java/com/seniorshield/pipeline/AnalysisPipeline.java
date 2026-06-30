@@ -2,7 +2,7 @@ package com.seniorshield.pipeline;
 
 import com.seniorshield.cache.CacheDao;
 import com.seniorshield.cache.CacheEntry;
-import com.seniorshield.cache.SuspicionDao;
+import com.seniorshield.cache.VoteDao;
 import com.seniorshield.client.AnalyzerClient;
 import com.seniorshield.client.ExtractorClient;
 import com.seniorshield.client.FactCheckClient;
@@ -27,7 +27,7 @@ public class AnalysisPipeline {
     private final AnalyzerClient   analyzerClient   = new AnalyzerClient();
     private final FactCheckClient  factCheckClient  = new FactCheckClient();
     private final CacheDao         cacheDao         = new CacheDao();
-    private final SuspicionDao     suspicionDao     = new SuspicionDao();
+    private final VoteDao          voteDao          = new VoteDao();
     private final ResultAggregator aggregator       = new ResultAggregator();
 
     private AnalysisPipeline() {}
@@ -170,10 +170,10 @@ public class AnalysisPipeline {
         sFactCheck.ok        = true;
         sFactCheck.elapsedMs = System.currentTimeMillis() - tsfc;
 
-        // 5. 통합 + 집단지성 가중치 (§3)
-        int suspicionCount = suspicionDao.getCount(normalizedUrl);
+        // 5. 통합 + 집단지성 가중치
+        int[] voteCounts = voteDao.getCounts(normalizedUrl); // [okCount, suspiciousCount]
         AnalyzeResponse.Verdict verdict = aggregator.aggregate(classify, info, image, facts);
-        aggregator.applySuspicionWeight(verdict, suspicionCount);
+        aggregator.applySuspicionWeight(verdict, voteCounts[0], voteCounts[1]);
 
         AnalyzeResponse response = new AnalyzeResponse();
         response.jobId          = jobId;
