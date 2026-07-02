@@ -30,7 +30,7 @@ public class ExtractServlet extends HttpServlet {
 
             String url = UrlValidator.normalize(raw);
             int fc = json.path("frame_count").asInt(3);
-            ExtractResult result = client.extract(url, fc);
+            ExtractResult result = client.extract(url, fc, "ko");
             resp.getWriter().print(JsonUtil.MAPPER.writeValueAsString(result));
         } catch (UrlValidator.InvalidUrlException e) {
             resp.setStatus(400);

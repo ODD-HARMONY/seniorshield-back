@@ -25,13 +25,14 @@ public class ExtractorClient {
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    public ExtractResult extract(String url, int frameCount) throws Exception {
+    public ExtractResult extract(String url, int frameCount, String subtitleLang) throws Exception {
         String body = JsonUtil.MAPPER.writeValueAsString(
                 JsonUtil.MAPPER.createObjectNode()
                         .put("url", url)
                         .put("frame_count", frameCount)
                         .put("extract_subtitle", true)
                         .put("extract_frames", frameCount > 0)
+                        .put("subtitle_lang", subtitleLang)
         );
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(URL + "/extract"))

@@ -20,9 +20,18 @@ public class ExtractResult {
         public String source;
         public String language;
         public String text;
-        @JsonProperty("char_count")    public Integer charCount;
-        @JsonProperty("segment_count") public Integer segmentCount;
+        @JsonProperty("char_count")        public Integer charCount;
+        @JsonProperty("segment_count")     public Integer segmentCount;
         public String reason;
+        @JsonProperty("available_langs")   public AvailableLangs availableLangs;
+        @JsonProperty("original_language") public String originalLanguage;
+        @JsonProperty("selection_reason")  public String selectionReason;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class AvailableLangs {
+        public java.util.List<String> manual;
+        public java.util.List<String> auto;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
