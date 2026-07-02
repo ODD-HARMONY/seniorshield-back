@@ -39,10 +39,12 @@ POST /api/analyze
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | `url` | string | ✅ | 유튜브 쇼츠 URL |
+| `lang` | string | 선택 | 응답 언어. `"ko"` (한국어, 기본값) 또는 `"en"` (영어). 미지원 값은 `"ko"`로 자동 처리 |
 
 ```json
 {
-  "url": "https://www.youtube.com/shorts/h5W4XNHR8BU"
+  "url": "https://www.youtube.com/shorts/h5W4XNHR8BU",
+  "lang": "ko"
 }
 ```
 
@@ -52,6 +54,7 @@ POST /api/analyze
 {
   "job_id": "3a9f1c2b",
   "video_id": "h5W4XNHR8BU",
+  "lang": "ko",
   "cached": false,
   "verdict": {
     "ai_generated": {
@@ -72,7 +75,9 @@ POST /api/analyze
       ]
     },
     "advertisement": {
-      "applicable": false
+      "applicable": false,
+      "confidence": null,
+      "reason": null
     },
     "community_signal": {
       "ok_count": 10,
@@ -100,7 +105,7 @@ POST /api/analyze
 |------|------|------|
 | `label` | string | `real` / `likely_ai` / `ai` / `uncertain` |
 | `confidence` | float | 0.0 ~ 1.0 |
-| `evidence` | string | 판단 근거 (한국어) |
+| `evidence` | string | 판단 근거 (`lang`에 따라 한국어 또는 영어) |
 
 **misinformation**
 
@@ -111,6 +116,14 @@ POST /api/analyze
 | `confidence` | float | 0.0 ~ 1.0. 팩트체크 기관 매칭 없으면 최대 0.7 캡 |
 | `claims` | array | 주장별 판정 목록 |
 
+**advertisement**
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `applicable` | bool | 광고/홍보성 영상 여부 |
+| `confidence` | float \| null | 광고 판정 신뢰도 (applicable=true일 때만 값 존재) |
+| `reason` | string \| null | 광고 판정 근거 (applicable=true일 때만 값 존재) |
+
 **community_signal**
 
 | 필드 | 타입 | 설명 |
@@ -119,14 +132,15 @@ POST /api/analyze
 | `suspicious_count` | int | "이상해요" 투표 수 |
 | `threshold_reached` | string | `none` / `low` (이상해요 ≥5) / `high` (이상해요 ≥20) |
 
-**display_message** (고령층 표시용 한 줄 메시지)
+**display_message** (고령층 표시용 한 줄 메시지, `lang`에 따라 언어 선택)
 
-| 조건 | 메시지 |
-|------|--------|
-| AI 생성 + 허위정보 | `기계가 만든 영상이고, 사실과 다를 수 있어요` |
-| AI 생성만 | `기계가 만든 영상이에요` |
-| 허위정보만 | `사실과 다를 수 있어요` |
-| 이상 없음 | `특별한 위험 신호가 없어요` |
+| 조건 | `lang=ko` | `lang=en` |
+|------|-----------|-----------|
+| AI 생성 + 허위정보 | `기계가 만든 영상이고, 사실과 다를 수 있어요` | `This appears to be AI-generated and may contain false information` |
+| AI 생성만 | `기계가 만든 영상이에요` | `This appears to be AI-generated content` |
+| 허위정보만 | `사실과 다를 수 있어요` | `This content may contain false information` |
+| 이상 없음 | `특별한 위험 신호가 없어요` | `No significant warning signs detected` |
+| + 커뮤니티 high | 위 메시지 + ` · 많은 분들이 의심하고 있어요` | 위 메시지 + ` · Many users have flagged this as suspicious` |
 
 #### stages 필드
 
@@ -150,14 +164,20 @@ POST /api/analyze
 
 ### 응답 (502) — 추출 실패
 
+| `error` 값 | 발생 상황 |
+|-----------|---------|
+| `video_unavailable` | 영상이 삭제/비공개/지역 제한 |
+| `video_too_long` | Shorts가 아닌 긴 영상 URL |
+| `extractor_error` | YouTube 봇 차단(429), 네트워크 오류 등 기타 추출 실패 |
+
 ```json
 {
-  "error": "extractor_timeout",
+  "error": "video_unavailable",
   "detail": "..."
 }
 ```
 
-> 분석 결과는 14일간 캐시됩니다. 동일 URL 재요청 시 `cached: true`로 즉시 반환됩니다.
+> 분석 결과는 14일간 캐시됩니다. `lang`이 다르면 별도 캐시로 관리됩니다. 동일 URL + 동일 lang 재요청 시 `cached: true`로 즉시 반환됩니다.
 
 ---
 
@@ -307,11 +327,13 @@ YouTube URL에서 자막과 프레임을 추출합니다.
 |------|------|------|------|
 | `url` | string | ✅ | 유튜브 쇼츠 URL |
 | `frame_count` | int | 선택 | 추출할 프레임 수 (기본값: 3) |
+| `subtitle_lang` | string | 선택 | 선호 자막 언어 (기본값: `"ko"`). 없으면 자동 fallback |
 
 ```json
 {
   "url": "https://www.youtube.com/shorts/h5W4XNHR8BU",
-  "frame_count": 3
+  "frame_count": 3,
+  "subtitle_lang": "ko"
 }
 ```
 
@@ -328,7 +350,13 @@ YouTube URL에서 자막과 프레임을 추출합니다.
     "language": "ko",
     "text": "손목을 돌릴 때 지긋하고 아프다면...",
     "char_count": 312,
-    "segment_count": 18
+    "segment_count": 18,
+    "original_language": "ko",
+    "selection_reason": "requested_lang_auto",
+    "available_langs": {
+      "manual": [],
+      "auto": ["ko", "en", "ja"]
+    }
   },
   "frames": {
     "count": 3,
@@ -337,6 +365,23 @@ YouTube URL에서 자막과 프레임을 추출합니다.
   }
 }
 ```
+
+**subtitle 추가 필드**
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `original_language` | string \| null | 실제 다운로드된 자막 언어 코드 |
+| `selection_reason` | string \| null | 언어 선택 이유. 아래 표 참고 |
+| `available_langs.manual` | string[] | 영상에 존재하는 수동 자막 언어 목록 |
+| `available_langs.auto` | string[] | 영상에 존재하는 자동 생성 자막 언어 목록 (최대 10개) |
+
+| `selection_reason` 값 | 의미 |
+|----------------------|------|
+| `requested_lang_manual` | 요청한 언어의 수동 자막 사용 |
+| `requested_lang_auto` | 요청한 언어의 자동 자막 사용 |
+| `fallback_to_{lang}_manual` | 요청 언어 없어 fallback 언어 수동 자막 사용 |
+| `fallback_to_{lang}_auto` | 요청 언어 없어 fallback 언어 자동 자막 사용 |
+| `no_subtitle_available` | 자막 없음 |
 
 ---
 
@@ -349,6 +394,7 @@ YouTube URL에서 자막과 프레임을 추출합니다.
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | `subtitle_text` | string | ✅ | 자막 텍스트 |
+| `lang` | string | 선택 | 응답 언어 (`"ko"` / `"en"`, 기본값: `"ko"`) |
 
 ### 응답 (200)
 
@@ -380,6 +426,7 @@ YouTube URL에서 자막과 프레임을 추출합니다.
 |------|------|------|------|
 | `subtitle_text` | string | ✅ | 자막 텍스트 |
 | `category` | string | 선택 | classify에서 반환한 카테고리 (기본값: `"other"`) |
+| `lang` | string | 선택 | 응답 언어 (`"ko"` / `"en"`, 기본값: `"ko"`) |
 
 ### 응답 (200)
 
@@ -416,6 +463,7 @@ YouTube URL에서 자막과 프레임을 추출합니다.
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | `frames_base64` | string[] | ✅ | JPEG 프레임을 base64 인코딩한 배열 |
+| `lang` | string | 선택 | 응답 언어 (`"ko"` / `"en"`, 기본값: `"ko"`) |
 
 ### 응답 (200)
 
@@ -450,7 +498,7 @@ Google Fact Check Tools API로 주장의 팩트체크 결과를 조회합니다.
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | `claim` | string | ✅ | 검증할 주장 텍스트 |
-| `language` | string | 선택 | 검색 언어 (기본값: `"ko"`) |
+| `lang` | string | 선택 | 검색 시작 언어 (`"ko"` / `"en"`, 기본값: `"ko"`). 결과 없으면 fallback 언어로 재시도 |
 
 ### 응답 (200)
 
@@ -466,7 +514,8 @@ Google Fact Check Tools API로 주장의 팩트체크 결과를 조회합니다.
       "reviewDate": "2024-03-15"
     }
   ],
-  "language_used": "en"
+  "language_used": "en",
+  "fallback_applied": true
 }
 ```
 
@@ -479,7 +528,10 @@ Google Fact Check Tools API로 주장의 팩트체크 결과를 조회합니다.
 | `false` | 거짓 |
 | `unknown` | 분류 불가 |
 
-팩트체크 기관이 다루지 않는 주제(의학 해부학 등)는 `matches: []`로 반환됩니다.
+| `fallback_applied` | bool | 요청 언어에서 결과가 없어 다른 언어로 재시도한 경우 `true` |
+
+팩트체크 기관이 다루지 않는 주제(의학 해부학 등)는 `matches: []`로 반환됩니다.  
+fallback 순서: `ko` → `en`, `en` → `ko`
 
 ---
 
@@ -492,8 +544,9 @@ Google Fact Check Tools API로 주장의 팩트체크 결과를 조회합니다.
 | 400 | `invalid_vote_type` | vote_type이 `ok` / `suspicious` 이외의 값 |
 | 400 | `missing_url_parameter` | GET 요청에 url 파라미터 없음 |
 | 429 | `rate_limit_exceeded` | 같은 client_id로 1분에 10건 초과 |
-| 502 | `extractor_timeout` | YouTube 영상 추출 실패 (봇 차단 등) |
-| 502 | `extractor_error` | extractor 서비스 오류 |
+| 502 | `video_unavailable` | 영상이 삭제/비공개/지역 제한 |
+| 502 | `video_too_long` | Shorts가 아닌 긴 영상 URL |
+| 502 | `extractor_error` | YouTube 봇 차단(429), 네트워크 오류 등 기타 추출 실패 |
 | 500 | `internal_error` | 서버 내부 오류 |
 
 > classify / info / image 단계 실패는 502를 반환하지 않고, `/api/analyze` 응답의 `stages[xxx].ok = false`로 표현됩니다. 해당 단계 결과는 `"uncertain"`으로 처리됩니다.
