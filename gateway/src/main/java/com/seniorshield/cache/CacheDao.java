@@ -32,23 +32,24 @@ public class CacheDao {
         return ds;
     }
 
-    /** §10.2: 유효 캐시 조회. 모델 불일치 시 미스 처리 */
-    public CacheEntry findValid(String urlHash,
+    /** §10.2: 유효 캐시 조회. 모델 불일치·lang 불일치 시 미스 처리 */
+    public CacheEntry findValid(String urlHash, String lang,
                                 String modelClassify, String modelInfo, String modelImage) {
         String sql = "SELECT result, hit_count FROM analysis_cache " +
-                     "WHERE url_hash = ? AND expires_at > NOW() " +
+                     "WHERE url_hash = ? AND lang = ? AND expires_at > NOW() " +
                      "AND model_classify = ? AND model_info = ? AND model_image = ?";
         try (Connection c = dataSource().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, urlHash);
-            ps.setString(2, modelClassify);
-            ps.setString(3, modelInfo);
-            ps.setString(4, modelImage);
+            ps.setString(2, lang);
+            ps.setString(3, modelClassify);
+            ps.setString(4, modelInfo);
+            ps.setString(5, modelImage);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     String json = rs.getString("result");
                     int hits    = rs.getInt("hit_count");
-                    incrementHit(urlHash);
+                    incrementHit(urlHash, lang);
                     return new CacheEntry(json, hits);
                 }
             }
@@ -59,29 +60,30 @@ public class CacheDao {
     }
 
     /** §10.2: 캐시 저장 */
-    public void save(String urlHash, String resultJson,
+    public void save(String urlHash, String lang, String resultJson,
                      String modelClassify, String modelInfo, String modelImage,
                      int ttlDays) {
         String sql = "INSERT INTO analysis_cache " +
-                     "(url_hash, result, model_classify, model_info, model_image, expires_at) " +
-                     "VALUES (?, ?, ?, ?, ?, ?) " +
+                     "(url_hash, lang, result, model_classify, model_info, model_image, expires_at) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?) " +
                      "ON DUPLICATE KEY UPDATE result=?, expires_at=?, " +
                      "model_classify=?, model_info=?, model_image=?";
         try (Connection c = dataSource().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             LocalDateTime expires = LocalDateTime.now().plusDays(ttlDays);
             ps.setString(1, urlHash);
-            ps.setString(2, resultJson);
-            ps.setString(3, modelClassify);
-            ps.setString(4, modelInfo);
-            ps.setString(5, modelImage);
-            ps.setTimestamp(6, Timestamp.valueOf(expires));
+            ps.setString(2, lang);
+            ps.setString(3, resultJson);
+            ps.setString(4, modelClassify);
+            ps.setString(5, modelInfo);
+            ps.setString(6, modelImage);
+            ps.setTimestamp(7, Timestamp.valueOf(expires));
             // ON DUPLICATE KEY
-            ps.setString(7, resultJson);
-            ps.setTimestamp(8, Timestamp.valueOf(expires));
-            ps.setString(9, modelClassify);
-            ps.setString(10, modelInfo);
-            ps.setString(11, modelImage);
+            ps.setString(8, resultJson);
+            ps.setTimestamp(9, Timestamp.valueOf(expires));
+            ps.setString(10, modelClassify);
+            ps.setString(11, modelInfo);
+            ps.setString(12, modelImage);
             ps.executeUpdate();
         } catch (Exception e) {
             log.log(Level.WARNING, "Cache save failed", e);
@@ -99,11 +101,13 @@ public class CacheDao {
         }
     }
 
-    private void incrementHit(String urlHash) {
+    private void incrementHit(String urlHash, String lang) {
         try (Connection c = dataSource().getConnection();
              PreparedStatement ps = c.prepareStatement(
-                     "UPDATE analysis_cache SET hit_count = hit_count + 1 WHERE url_hash = ?")) {
+                     "UPDATE analysis_cache SET hit_count = hit_count + 1 " +
+                     "WHERE url_hash = ? AND lang = ?")) {
             ps.setString(1, urlHash);
+            ps.setString(2, lang);
             ps.executeUpdate();
         } catch (Exception e) {
             log.log(Level.FINE, "Hit count update failed", e);

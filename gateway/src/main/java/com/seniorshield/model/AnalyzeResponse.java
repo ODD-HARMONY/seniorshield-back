@@ -10,6 +10,7 @@ public class AnalyzeResponse {
     @JsonProperty("job_id")          public String jobId;
     @JsonProperty("video_id")        public String videoId;
     public boolean cached;
+    public String lang;
     public Verdict verdict;
     public Map<String, StageStatus> stages;
     @JsonProperty("elapsed_ms_total") public long elapsedMsTotal;
@@ -52,6 +53,8 @@ public class AnalyzeResponse {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class Advertisement {
         public boolean applicable;
+        public Double confidence;  // null when not applicable (feature not yet implemented)
+        public String reason;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

@@ -3,18 +3,28 @@ import httpx
 
 API = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
 
+FALLBACK_ORDER = {
+    "ko": ["ko", "en"],
+    "en": ["en", "ko"],
+}
 
-async def search(claim: str, language: str = "ko") -> dict:
-    result = await _search_one(claim, language)
-    if not result["matches"] and language != "en":
-        result = await _search_one(claim, "en")
+
+async def search(claim: str, lang: str = "ko") -> dict:
+    order = FALLBACK_ORDER.get(lang, ["ko", "en"])
+    for i, l in enumerate(order):
+        result = await _search_one(claim, l)
+        if result["matches"]:
+            result["fallback_applied"] = (i > 0)
+            return result
+    # 모든 언어에서 결과 없음
+    result["fallback_applied"] = False
     return result
 
 
-async def _search_one(claim: str, language: str) -> dict:
+async def _search_one(claim: str, lang: str) -> dict:
     params = {
         "query": claim,
-        "languageCode": language,
+        "languageCode": lang,
         "key": os.environ.get("GOOGLE_FACTCHECK_API_KEY", ""),
         "pageSize": 10,
     }
@@ -22,7 +32,7 @@ async def _search_one(claim: str, language: str) -> dict:
         r = await cli.get(API, params=params)
         r.raise_for_status()
         data = r.json()
-    return _normalize(data, language)
+    return _normalize(data, lang)
 
 
 def _normalize(raw: dict, language_used: str) -> dict:

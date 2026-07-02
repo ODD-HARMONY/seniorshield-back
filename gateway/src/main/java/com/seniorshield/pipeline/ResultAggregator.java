@@ -12,7 +12,8 @@ public class ResultAggregator {
             ClassifyResult classify,
             InfoResult info,
             ImageResult image,
-            List<FactCheckResult> facts) {
+            List<FactCheckResult> facts,
+            String lang) {
 
         AnalyzeResponse.Verdict v = new AnalyzeResponse.Verdict();
 
@@ -26,8 +27,8 @@ public class ResultAggregator {
         v.advertisement = new AnalyzeResponse.Advertisement();
         v.advertisement.applicable = false;
 
-        // §9.3 display_message
-        v.displayMessage = buildMessage(v.aiGenerated, v.misinformation);
+        // §9.3 display_message (communitySignal은 applySuspicionWeight에서 채워지므로 null 전달)
+        v.displayMessage = buildMessage(v.aiGenerated, v.misinformation, null, lang);
 
         return v;
     }
@@ -117,7 +118,7 @@ public class ResultAggregator {
     }
 
     /** 집단지성 가중치 결합 — aggregate() 호출 후 적용. suspicious_count 기준으로 threshold 판단 */
-    public void applySuspicionWeight(AnalyzeResponse.Verdict v, int okCount, int suspiciousCount) {
+    public void applySuspicionWeight(AnalyzeResponse.Verdict v, int okCount, int suspiciousCount, String lang) {
         final int LOW  = 5;
         final int HIGH = 20;
 
@@ -146,20 +147,34 @@ public class ResultAggregator {
         }
 
         v.communitySignal = cs;
-        v.displayMessage  = buildMessage(v.aiGenerated, v.misinformation);
+        v.displayMessage  = buildMessage(v.aiGenerated, v.misinformation, cs, lang);
     }
 
     /** §9.3 display_message 규칙 표 */
     private String buildMessage(AnalyzeResponse.AiGenerated ai,
-                                AnalyzeResponse.Misinformation mis) {
+                                AnalyzeResponse.Misinformation mis,
+                                AnalyzeResponse.CommunitySignal cs,
+                                String lang) {
         boolean isAi    = ai  != null && (ai.label.equals("ai") || ai.label.equals("likely_ai"));
         boolean isFalse = mis != null && mis.applicable
                 && mis.label != null
                 && (mis.label.equals("false") || mis.label.equals("likely_false"));
+        boolean communityHigh = cs != null && "high".equals(cs.thresholdReached);
 
-        if (isAi && isFalse) return "기계가 만든 영상이고, 사실과 다를 수 있어요";
-        if (isAi)            return "기계가 만든 영상이에요";
-        if (isFalse)         return "사실과 다를 수 있어요";
-        return "특별한 위험 신호가 없어요";
+        String base;
+        if ("en".equals(lang)) {
+            if (isAi && isFalse) base = "This appears to be AI-generated and may contain false information";
+            else if (isAi)       base = "This appears to be AI-generated content";
+            else if (isFalse)    base = "This content may contain false information";
+            else                 base = "No significant warning signs detected";
+            if (communityHigh)   base = base + " · Many users have flagged this as suspicious";
+        } else {
+            if (isAi && isFalse) base = "기계가 만든 영상이고, 사실과 다를 수 있어요";
+            else if (isAi)       base = "기계가 만든 영상이에요";
+            else if (isFalse)    base = "사실과 다를 수 있어요";
+            else                 base = "특별한 위험 신호가 없어요";
+            if (communityHigh)   base = base + " · 많은 분들이 의심하고 있어요";
+        }
+        return base;
     }
 }

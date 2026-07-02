@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 class ClassifyRequest(BaseModel):
     subtitle_text: str
+    lang: str = "ko"
 
 
 class ClassifyResponse(BaseModel):
@@ -16,6 +17,7 @@ class ClassifyResponse(BaseModel):
 class InfoRequest(BaseModel):
     subtitle_text: str
     category: str = "other"
+    lang: str = "ko"
 
 
 class Claim(BaseModel):
@@ -34,6 +36,7 @@ class InfoResponse(BaseModel):
 
 class ImageRequest(BaseModel):
     frames_base64: List[str]
+    lang: str = "ko"
 
 
 class FrameResult(BaseModel):

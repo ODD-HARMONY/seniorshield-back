@@ -36,11 +36,12 @@ public class ClassifyServlet extends HttpServlet {
             } else {
                 // form (a)
                 String url = UrlValidator.normalize(json.path("url").asText(""));
-                ExtractResult ex = extractorClient.extract(url, 0);
+                ExtractResult ex = extractorClient.extract(url, 0, "ko");
                 subtitleText = (ex.subtitle != null && ex.subtitle.available) ? ex.subtitle.text : "";
             }
 
-            ClassifyResult result = analyzerClient.classify(subtitleText);
+            String lang = json.path("lang").asText("ko");
+            ClassifyResult result = analyzerClient.classify(subtitleText, lang);
             resp.getWriter().print(JsonUtil.MAPPER.writeValueAsString(result));
         } catch (UrlValidator.InvalidUrlException e) {
             resp.setStatus(400);

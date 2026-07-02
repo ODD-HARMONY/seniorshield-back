@@ -40,12 +40,13 @@ public class ImageServlet extends HttpServlet {
                 // form (a)
                 String url = UrlValidator.normalize(json.path("url").asText(""));
                 int fc = json.path("frame_count").asInt(3);
-                ExtractResult ex = extractorClient.extract(url, fc);
+                ExtractResult ex = extractorClient.extract(url, fc, "ko");
                 frames = (ex.frames != null && ex.frames.framesBase64 != null)
                         ? ex.frames.framesBase64 : List.of();
             }
 
-            ImageResult result = analyzerClient.image(frames);
+            String lang = json.path("lang").asText("ko");
+            ImageResult result = analyzerClient.image(frames, lang);
             resp.getWriter().print(JsonUtil.MAPPER.writeValueAsString(result));
         } catch (UrlValidator.InvalidUrlException e) {
             resp.setStatus(400);

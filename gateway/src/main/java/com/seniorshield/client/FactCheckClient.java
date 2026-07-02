@@ -25,11 +25,11 @@ public class FactCheckClient {
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    public FactCheckResult check(String claim, String language) throws Exception {
+    public FactCheckResult check(String claim, String lang) throws Exception {
         String body = JsonUtil.MAPPER.writeValueAsString(
                 JsonUtil.MAPPER.createObjectNode()
                         .put("claim", claim)
-                        .put("language", language));
+                        .put("lang", lang));
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(URL + "/factcheck"))
                 .header("Content-Type", "application/json")

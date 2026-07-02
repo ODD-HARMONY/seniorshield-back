@@ -29,25 +29,30 @@ public class AnalyzerClient {
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    public ClassifyResult classify(String subtitleText) throws Exception {
-        String body = JsonUtil.MAPPER.writeValueAsString(
-                JsonUtil.MAPPER.createObjectNode().put("subtitle_text", subtitleText));
-        return post("/classify", body, ClassifyResult.class);
-    }
-
-    public InfoResult info(String subtitleText, String category) throws Exception {
+    public ClassifyResult classify(String subtitleText, String lang) throws Exception {
         String body = JsonUtil.MAPPER.writeValueAsString(
                 JsonUtil.MAPPER.createObjectNode()
                         .put("subtitle_text", subtitleText)
-                        .put("category", category));
+                        .put("lang", lang));
+        return post("/classify", body, ClassifyResult.class);
+    }
+
+    public InfoResult info(String subtitleText, String category, String lang) throws Exception {
+        String body = JsonUtil.MAPPER.writeValueAsString(
+                JsonUtil.MAPPER.createObjectNode()
+                        .put("subtitle_text", subtitleText)
+                        .put("category", category)
+                        .put("lang", lang));
         return post("/info", body, InfoResult.class);
     }
 
-    public ImageResult image(List<String> framesBase64) throws Exception {
+    public ImageResult image(List<String> framesBase64, String lang) throws Exception {
         ArrayNode arr = JsonUtil.MAPPER.createArrayNode();
         framesBase64.forEach(arr::add);
         String body = JsonUtil.MAPPER.writeValueAsString(
-                JsonUtil.MAPPER.createObjectNode().set("frames_base64", arr));
+                JsonUtil.MAPPER.createObjectNode()
+                        .put("lang", lang)
+                        .set("frames_base64", arr));
         return post("/image", body, ImageResult.class);
     }
 

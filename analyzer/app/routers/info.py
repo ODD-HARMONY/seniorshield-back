@@ -10,7 +10,7 @@ router = APIRouter()
 async def info(req: InfoRequest):
     try:
         result = await asyncio.to_thread(
-            gemini_info.analyze_info, req.subtitle_text, req.category
+            gemini_info.analyze_info, req.subtitle_text, req.category, req.lang
         )
         return InfoResponse(**result)
     except Exception as e:

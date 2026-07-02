@@ -7,7 +7,8 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FactCheckResult {
     public List<Match> matches;
-    @JsonProperty("language_used") public String languageUsed;
+    @JsonProperty("language_used")    public String  languageUsed;
+    @JsonProperty("fallback_applied") public boolean fallbackApplied;
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Match {

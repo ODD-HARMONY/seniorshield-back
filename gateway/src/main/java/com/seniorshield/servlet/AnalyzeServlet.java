@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.seniorshield.model.AnalyzeResponse;
 import com.seniorshield.pipeline.AnalysisPipeline;
 import com.seniorshield.util.JsonUtil;
+import com.seniorshield.util.LangValidator;
 
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
@@ -29,7 +30,9 @@ public class AnalyzeServlet extends HttpServlet {
             resp.setStatus(400); writeError(resp, "invalid_url", "Missing url"); return;
         }
 
-        AnalyzeResponse result = AnalysisPipeline.getInstance().analyze(url);
+        String lang = LangValidator.normalize(json.path("lang").asText(null));
+
+        AnalyzeResponse result = AnalysisPipeline.getInstance().analyze(url, lang);
         if (result.error != null) {
             resp.setStatus(result.error.equals("invalid_url") ? 400 : 502);
         }
