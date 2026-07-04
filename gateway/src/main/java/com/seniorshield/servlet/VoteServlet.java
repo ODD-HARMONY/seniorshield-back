@@ -14,7 +14,7 @@ import java.io.IOException;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/** POST /api/vote — 투표 제출  |  GET /api/vote — 투표 결과 조회 */
+/** POST /api/vote — 투표 제출  |  DELETE /api/vote — 투표 취소  |  GET /api/vote — 투표 결과 조회 */
 @WebServlet("/api/vote")
 public class VoteServlet extends HttpServlet {
 
@@ -57,6 +57,43 @@ public class VoteServlet extends HttpServlet {
             node.put("suspicious_count", result.suspiciousCount);
             node.put("already_voted",    result.alreadyVoted);
             node.put("changed",          result.changed);
+            resp.getWriter().print(JsonUtil.MAPPER.writeValueAsString(node));
+
+        } catch (UrlValidator.InvalidUrlException e) {
+            error(resp, 400, "invalid_url", e.getMessage());
+        } catch (Exception e) {
+            error(resp, 500, "internal_error", e.getMessage());
+        }
+    }
+
+    /** 투표 취소: DELETE /api/vote  body: {"url":"...","client_id":"..."} */
+    @Override
+    protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        resp.setContentType("application/json;charset=UTF-8");
+        try {
+            JsonNode json = JsonUtil.MAPPER.readTree(
+                    req.getReader().lines().collect(Collectors.joining()));
+
+            String rawUrl   = json.path("url").asText(null);
+            String clientId = json.path("client_id").asText(null);
+
+            if (rawUrl == null || rawUrl.isBlank()) {
+                error(resp, 400, "invalid_url", null); return;
+            }
+            if (clientId == null || !HEX64.matcher(clientId).matches()) {
+                error(resp, 400, "missing_client_id", "64자 hex 문자열이어야 합니다"); return;
+            }
+
+            String canonicalUrl = UrlValidator.canonicalize(rawUrl);
+            VoteDao.VoteResult result = dao.cancel(canonicalUrl, clientId);
+
+            ObjectNode node = JsonUtil.MAPPER.createObjectNode();
+            node.put("ok",               true);
+            node.put("url",              canonicalUrl);
+            node.put("cancelled",        result.cancelled);
+            if (result.voteType != null) node.put("vote_type", result.voteType);
+            node.put("ok_count",         result.okCount);
+            node.put("suspicious_count", result.suspiciousCount);
             resp.getWriter().print(JsonUtil.MAPPER.writeValueAsString(node));
 
         } catch (UrlValidator.InvalidUrlException e) {

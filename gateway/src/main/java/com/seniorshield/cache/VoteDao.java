@@ -32,9 +32,10 @@ public class VoteDao {
     }
 
     public static class VoteResult {
-        public String  voteType;      // "ok" | "suspicious"
+        public String  voteType;      // "ok" | "suspicious" | null(취소 시 이전 타입)
         public boolean alreadyVoted;  // 같은 타입으로 이미 투표함
         public boolean changed;       // 이전 투표에서 타입을 변경함
+        public boolean cancelled;     // 투표 취소 성공 여부
         public int     okCount;
         public int     suspiciousCount;
     }
@@ -157,6 +158,59 @@ public class VoteDao {
             log.log(Level.WARNING, "VoteDao.getAggregate failed", e);
             return null;
         }
+    }
+
+    /** 투표 취소 — vote_records 에서 삭제하고 집계 감소 */
+    public VoteResult cancel(String canonicalUrl, String clientId) throws Exception {
+        VoteResult result = new VoteResult();
+
+        try (Connection c = dataSource().getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                String existing = null;
+                try (PreparedStatement ps = c.prepareStatement(
+                        "SELECT vote_type FROM vote_records WHERE url = ? AND client_id = ? FOR UPDATE")) {
+                    ps.setString(1, canonicalUrl);
+                    ps.setString(2, clientId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (rs.next()) existing = rs.getString(1);
+                    }
+                }
+
+                if (existing == null) {
+                    result.cancelled = false;
+                } else {
+                    try (PreparedStatement ps = c.prepareStatement(
+                            "DELETE FROM vote_records WHERE url = ? AND client_id = ?")) {
+                        ps.setString(1, canonicalUrl);
+                        ps.setString(2, clientId);
+                        ps.executeUpdate();
+                    }
+                    adjustAggregate(c, canonicalUrl, existing, -1);
+                    result.cancelled = true;
+                    result.voteType  = existing;
+                }
+
+                try (PreparedStatement ps = c.prepareStatement(
+                        "SELECT ok_count, suspicious_count FROM vote_aggregate WHERE url = ?")) {
+                    ps.setString(1, canonicalUrl);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (rs.next()) {
+                            result.okCount         = rs.getInt("ok_count");
+                            result.suspiciousCount = rs.getInt("suspicious_count");
+                        }
+                    }
+                }
+
+                c.commit();
+            } catch (Exception e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+        return result;
     }
 
     /** ok_count 또는 suspicious_count를 delta(+1/-1)만큼 조정 */
