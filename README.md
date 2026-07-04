@@ -216,6 +216,34 @@ curl -X POST http://localhost:8080/api/vote \
 
 ---
 
+### `DELETE /api/vote` — 투표 취소
+
+```bash
+curl -X DELETE http://localhost:8080/api/vote \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://www.youtube.com/shorts/XXXXXXXXXXX",
+    "client_id": "64자_hex_문자열"
+  }'
+```
+
+**응답**
+
+```json
+{
+  "ok": true,
+  "url": "https://www.youtube.com/watch?v=XXXXXXXXXXX",
+  "cancelled": true,
+  "vote_type": "suspicious",
+  "ok_count": 3,
+  "suspicious_count": 16
+}
+```
+
+투표 기록이 없으면 `"cancelled": false`로 반환됩니다 (오류 아님).
+
+---
+
 ### `GET /api/vote?url=...` — 투표 결과 조회
 
 ```bash
@@ -295,7 +323,7 @@ docker compose down -v
 ### DB 스키마 마이그레이션 (컨테이너 재시작 없이)
 
 ```bash
-docker compose exec mariadb mariadb -u root -p${MARIADB_ROOT_PASSWORD} ${MARIADB_DATABASE} < db/init/02_suspicion.sql
+docker compose exec mariadb mariadb -u root -p${MARIADB_ROOT_PASSWORD} ${MARIADB_DATABASE} < db/init/02_vote.sql
 ```
 
 ---

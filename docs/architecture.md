@@ -19,7 +19,7 @@ Android 앱
 │                        :8080                            │
 │                                                         │
 │  AnalyzeServlet ──► AnalysisPipeline ──► ResultAggregator│
-│  SuspicionServlet     CacheDao / SuspicionDao           │
+│  VoteServlet          CacheDao / VoteDao                │
 │  HealthServlet        RateLimitFilter                   │
 └──────────┬──────────────────────┬───────────────────────┘
            │ HTTP/1.1 (내부)      │ JDBC
@@ -28,7 +28,7 @@ Android 앱
     │             │         │   MariaDB 11  │
     ▼             ▼         │  :3306        │
 ┌────────┐  ┌──────────┐   │ analysis_cache│
-│extractor│  │ analyzer │   │ suspicion_*   │
+│extractor│  │ analyzer │   │ vote_*        │
 │FastAPI  │  │ FastAPI  │   └──────────────┘
 │ :8000   │  │ :8001    │
 └────────┘  └──────────┘
@@ -71,7 +71,7 @@ Let's Encrypt 인증서를 사용한 TLS 종단 처리를 담당합니다.
 - **라우팅**: URL 정규화 → 각 파이썬 서비스 호출
 - **파이프라인 오케스트레이션**: `AnalysisPipeline`에서 단계별 호출 및 병렬 처리
 - **캐싱**: MariaDB `analysis_cache` 테이블에 SHA-256 URL 해시로 결과 저장
-- **집단지성**: `SuspicionDao`로 의심 신고 수 집계, `ResultAggregator`에서 가중치 반영
+- **집단지성**: `VoteDao`로 투표 수 집계, `ResultAggregator`에서 가중치 반영
 - **Rate limit**: `RateLimitFilter`로 client_id 기준 분당 10건 제한
 
 HTTP 통신 시 모든 Python 서비스에 `.version(HTTP_1_1)`을 명시합니다.  
@@ -118,8 +118,8 @@ Google Fact Check Tools API를 래핑합니다.
 | 테이블 | 용도 |
 |--------|------|
 | `analysis_cache` | 분석 결과 캐싱. 복합 PK: `(url_hash, lang)` + 모델 버전으로 키 구성 |
-| `suspicion_reports` | 개별 투표 로그 (1인 1표 보장: `UNIQUE KEY(url, client_id)`) |
-| `suspicion_aggregate` | 영상별 투표 카운트 집계 (빠른 조회용) |
+| `vote_records` | 개별 투표 로그 (1인 1표 보장: `UNIQUE KEY(url, client_id)`) |
+| `vote_aggregate` | 영상별 투표 카운트 집계 (빠른 조회용) |
 
 ---
 
@@ -184,22 +184,31 @@ POST /api/analyze  { url, lang }
 
 ---
 
-## 4. 집단지성 (Community Suspicion)
+## 4. 집단지성 (Community Vote)
 
-사용자가 "의심돼요" 버튼을 누르면 `POST /api/suspicion`으로 신고가 기록됩니다.
+사용자가 "괜찮아요"/"이상해요" 버튼을 누르면 `POST /api/vote`, 취소 시 `DELETE /api/vote`로 기록됩니다.
 
 ```
-신고 접수
+POST /api/vote  (투표 제출)
   │
   ├─ RateLimitFilter: 같은 client_id가 1분에 10건 초과 시 429 반환
   │
   ├─ UrlValidator.canonicalize(): URL 정규화 (캐시 키와 동일)
   │
-  └─ SuspicionDao.report() 트랜잭션:
-       ① INSERT INTO suspicion_reports (url, client_id)
-          → 중복이면 already_reported=true, 카운트 변경 없음
-       ② INSERT INTO suspicion_aggregate ... ON DUPLICATE KEY UPDATE count+1
-       ③ SELECT suspicion_count (응답용)
+  └─ VoteDao.vote() 트랜잭션:
+       ① SELECT vote_type FROM vote_records FOR UPDATE
+       ② 신규: INSERT → adjustAggregate(+1)
+          동일 타입 재투표: 변경 없음 (already_voted=true)
+          다른 타입으로 변경: UPDATE → adjustAggregate(기존 -1, 신규 +1)
+       ③ SELECT 최신 집계 (응답용)
+
+DELETE /api/vote  (투표 취소)
+  │
+  └─ VoteDao.cancel() 트랜잭션:
+       ① SELECT vote_type FROM vote_records FOR UPDATE
+       ② 기록 있으면: DELETE → adjustAggregate(-1)  (cancelled=true)
+          기록 없으면: 변경 없음                    (cancelled=false)
+       ③ SELECT 최신 집계 (응답용)
 ```
 
 `/api/analyze` 응답에 포함되는 가중치 결합 규칙:
@@ -242,7 +251,7 @@ seniorShield_back/
 │   ├── pom.xml
 │   ├── server.xml              # 커스텀 액세스 로그 (URL 비기록)
 │   └── src/main/java/com/seniorshield/
-│       ├── cache/              # CacheDao, SuspicionDao
+│       ├── cache/              # CacheDao, VoteDao
 │       ├── client/             # ExtractorClient, AnalyzerClient, FactCheckClient
 │       ├── filter/             # RateLimitFilter
 │       ├── model/              # AnalyzeResponse, ClassifyResult, ...
@@ -276,7 +285,7 @@ seniorShield_back/
 ├── db/
 │   └── init/
 │       ├── 01_schema.sql       # analysis_cache 테이블
-│       ├── 02_suspicion.sql    # suspicion_reports, suspicion_aggregate 테이블
+│       ├── 02_vote.sql         # vote_records, vote_aggregate 테이블
 │       └── 04_lang.sql         # analysis_cache 에 lang 컬럼 추가 (복합 PK)
 │
 ├── nginx/                      # HTTPS 설정 (--profile ssl 사용 시)
@@ -310,7 +319,7 @@ seniorShield_back/
 | Python FastAPI | async I/O로 Gemini API 병렬 호출, yt-dlp와 통합 용이 |
 | 프롬프트 외부 파일 마운트 | LLM 프롬프트는 코드가 아닌 설정. 재빌드 없이 튜닝 가능 |
 | URL → SHA-256 해시 캐싱 | DB에 원본 URL 미저장으로 개인정보 보호 |
-| 두 개의 suspicion 테이블 | 원본 로그(reports)와 집계(aggregate) 분리로 조회 성능 최적화 |
+| 두 개의 vote 테이블 | 원본 로그(records)와 집계(aggregate) 분리로 조회 성능 최적화 |
 | HikariCP `setDriverClassName` | Tomcat WebApp 클래스로더에서 `DriverManager`가 WAR 내 MariaDB 드라이버를 자동 탐지하지 못하는 문제 해결 |
 | nginx Docker Compose profile | SSL이 선택사항이므로 `--profile ssl` 없이 실행하면 nginx가 기동되지 않아 인증서 없는 환경에서도 오류 없이 구동 |
 | nginx에서 TLS 종단 | gateway(Tomcat)는 HTTP만 처리하고 SSL을 nginx에 위임하여 인증서 관리와 애플리케이션 로직을 분리 |
