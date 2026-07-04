@@ -203,6 +203,17 @@ public class AnalysisPipeline {
         AnalyzeResponse.Verdict verdict = aggregator.aggregate(classify, info, image, facts, lang);
         aggregator.applySuspicionWeight(verdict, voteCounts[0], voteCounts[1], lang);
 
+        // 핵심 단계 실패 시 display_message 재설정 (uncertain 결과를 정상으로 오해하지 않도록)
+        boolean classifyFailed = !sClassify.ok;
+        boolean imageFailed    = !sImage.ok;
+        if (classifyFailed || imageFailed) {
+            verdict.displayMessage = "en".equals(lang)
+                    ? "Analysis could not be completed. Please try again later."
+                    : "분석을 완료하지 못했어요. 잠시 후 다시 시도해주세요";
+            log.warning("Partial analysis job=" + jobId
+                    + " classifyOk=" + sClassify.ok + " imageOk=" + sImage.ok);
+        }
+
         AnalyzeResponse response = new AnalyzeResponse();
         response.jobId          = jobId;
         response.videoId        = videoId;
@@ -212,12 +223,14 @@ public class AnalysisPipeline {
         response.stages         = stages;
         response.elapsedMsTotal = System.currentTimeMillis() - totalStart;
 
-        // 6. 캐시 저장 — (url_hash, lang) 복합 키
-        try {
-            String json = JsonUtil.MAPPER.writeValueAsString(response);
-            cacheDao.save(urlHash, lang, json, modelClassify(), modelInfo(), modelImage(), cacheTtlDays());
-        } catch (Exception e) {
-            log.warning("Cache save failed: " + e.getMessage());
+        // 6. 캐시 저장 — 핵심 단계 실패 시 캐시 저장 건너뜀 (재시도 시 재분석 가능하도록)
+        if (!classifyFailed && !imageFailed) {
+            try {
+                String json = JsonUtil.MAPPER.writeValueAsString(response);
+                cacheDao.save(urlHash, lang, json, modelClassify(), modelInfo(), modelImage(), cacheTtlDays());
+            } catch (Exception e) {
+                log.warning("Cache save failed: " + e.getMessage());
+            }
         }
 
         return response;
