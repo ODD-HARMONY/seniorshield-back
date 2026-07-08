@@ -1,9 +1,11 @@
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ClassifyRequest(BaseModel):
     subtitle_text: str
+    title: Optional[str] = None
+    description: Optional[str] = None
     lang: str = "ko"
 
 
@@ -11,12 +13,16 @@ class ClassifyResponse(BaseModel):
     informational: bool
     category: str
     key_topic: str
-    reason: str
+    key_claim: str = ""
+    advertisement: bool = False
+    ad_label: str = "none"  # none | normal_ad | likely_false_ad | likely_scam
 
 
 class InfoRequest(BaseModel):
-    subtitle_text: str
+    key_claim: str
     category: str = "other"
+    title: Optional[str] = None
+    description: Optional[str] = None
     lang: str = "ko"
 
 
@@ -31,7 +37,19 @@ class InfoResponse(BaseModel):
     claims: List[Claim]
     overall_judgement: str
     confidence: float
-    reasoning: str
+
+
+class AdRequest(BaseModel):
+    frames_base64: List[str]
+    subtitle_text: str
+    initial_label: str  # likely_false_ad | likely_scam
+    lang: str = "ko"
+
+
+class AdResponse(BaseModel):
+    label: str
+    confidence: float
+    reason: Optional[str] = None
 
 
 class ImageRequest(BaseModel):
@@ -43,11 +61,21 @@ class FrameResult(BaseModel):
     index: int
     label: str
     confidence: float
-    evidence: str
+
+
+class InternalDebug(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    round1_observation: Optional[str] = None
+    round1_ms: Optional[int] = None
+    round2_ms: Optional[int] = None
 
 
 class ImageResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     per_frame: List[FrameResult]
     label: str
     confidence: float
-    aggregate_evidence: str
+    revision_notes: Optional[str] = None
+    internal: Optional[InternalDebug] = Field(None, alias="_internal")

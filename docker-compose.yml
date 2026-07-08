@@ -22,39 +22,15 @@ services:
       - "8080:8080"
     env_file: .env
     environment:
-      EXTRACTOR_URL: "http://extractor:8000"
-      ANALYZER_URL: "http://analyzer:8001"
-      FACTCHECK_URL: "http://factcheck:8002"
+      EXTRACTOR_URL: "http://analyzer:8001"
+      ANALYZER_URL:  "http://analyzer:8001"
+      FACTCHECK_URL: "http://analyzer:8001"
       DB_URL: "jdbc:mariadb://mariadb:3306/${MARIADB_DATABASE}"
     depends_on:
       mariadb:
         condition: service_healthy
-      extractor:
-        condition: service_healthy
       analyzer:
         condition: service_healthy
-      factcheck:
-        condition: service_healthy
-    networks: [ss-net]
-    restart: unless-stopped
-
-  extractor:
-    build: ./extractor
-    container_name: ss-extractor
-    expose: ["8000"]
-    env_file: .env
-    environment:
-      WORK_DIR: "/data/work"
-      COOKIE_FILE: "/cookies/cookies.txt"
-    volumes:
-      - work-data:/data/work
-      - ./cookies.txt:/cookies/cookies.txt
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 15s
     networks: [ss-net]
     restart: unless-stopped
 
@@ -63,28 +39,18 @@ services:
     container_name: ss-analyzer
     expose: ["8001"]
     env_file: .env
+    environment:
+      WORK_DIR:    "/data/work"
+      COOKIE_FILE: "/cookies/cookies.txt"
     volumes:
-      - ./prompts:/app/app/prompts:ro
+      - work-data:/data/work
+      - ./cookies.txt:/cookies/cookies.txt
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 10s
       timeout: 3s
       retries: 5
-      start_period: 10s
-    networks: [ss-net]
-    restart: unless-stopped
-
-  factcheck:
-    build: ./factcheck
-    container_name: ss-factcheck
-    expose: ["8002"]
-    env_file: .env
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
+      start_period: 15s
     networks: [ss-net]
     restart: unless-stopped
 

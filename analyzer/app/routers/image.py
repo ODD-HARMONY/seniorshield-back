@@ -10,6 +10,6 @@ router = APIRouter()
 async def image(req: ImageRequest):
     try:
         result = await asyncio.to_thread(gemini_image.detect_aigen, req.frames_base64, req.lang)
-        return ImageResponse(**result)
+        return ImageResponse.model_validate(result)
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))

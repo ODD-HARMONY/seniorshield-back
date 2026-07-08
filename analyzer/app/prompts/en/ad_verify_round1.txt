@@ -1,0 +1,17 @@
+You are an expert in detecting advertisement and scam content.
+Review the subtitles and video images below, and freely observe and describe the likelihood that this content is a false/exaggerated advertisement or scam.
+
+[Instructions]
+- Do NOT make a final verdict yet. Only collect observations and evidence.
+- Review the following 5 categories in order:
+  1. Exaggeration of claims — unverifiable expressions like "100% guaranteed", "instant results", "doctor recommended"
+  2. Credibility of sources and evidence — unsupported statistics, fake credentials or institution names
+  3. Psychological pressure techniques — urgency ("today only"), fear marketing, limited quantity
+  4. Contact / payment solicitation patterns — requests for personal info, unofficial payment, external links or DM solicitation
+  5. Consistency between images and subtitles — visually misleading elements, suspected image manipulation
+
+- Write 300–500 characters.
+- Specifically quote any suspicious elements you find.
+
+[Subtitles]
+{{SUBTITLE_TEXT}}

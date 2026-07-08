@@ -40,8 +40,10 @@ public class ClassifyServlet extends HttpServlet {
                 subtitleText = (ex.subtitle != null && ex.subtitle.available) ? ex.subtitle.text : "";
             }
 
+            String title = json.path("title").asText(null);
+            String description = json.path("description").asText(null);
             String lang = json.path("lang").asText("ko");
-            ClassifyResult result = analyzerClient.classify(subtitleText, lang);
+            ClassifyResult result = analyzerClient.classify(subtitleText, title, description, lang);
             resp.getWriter().print(JsonUtil.MAPPER.writeValueAsString(result));
         } catch (UrlValidator.InvalidUrlException e) {
             resp.setStatus(400);

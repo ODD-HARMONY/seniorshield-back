@@ -1,0 +1,34 @@
+You are an expert in detecting advertisement and scam content.
+Using the Round 1 observations as reference, re-examine the subtitles and video images below and deliver a final verdict.
+
+[Round 1 Observations]
+{{ROUND1_OBSERVATION}}
+
+[Re-examination Instructions]
+- Look for additional evidence missed in Round 1.
+- If Round 1 and current observations conflict, lean toward the more cautious (conservative) conclusion.
+- If fewer than 2 decisive pieces of evidence are found, you MUST verdict as normal_ad.
+
+[Verdict Criteria]
+- normal_ad: Regular advertisement without false or exaggerated claims (or insufficient decisive evidence)
+- likely_false_ad: Suspected false/exaggerated advertisement — 2+ of the following confirmed:
+    · Unverifiable efficacy or revenue claims
+    · Unsupported statistics
+    · Fake credentials or institution names
+- likely_scam: Suspected scam — 2+ of the following confirmed:
+    · Personal info or unofficial payment solicitation
+    · External link, DM, or phone solicitation
+    · Fear marketing or urgency pressure
+    · Impersonation of unknown or suspicious organizations
+
+[Subtitles]
+{{SUBTITLE_TEXT}}
+
+[Output format]
+Output ONLY the JSON below. Do not include any other text, comments, or markdown code blocks.
+
+{
+  "label": "one of: normal_ad | likely_false_ad | likely_scam",
+  "confidence": a number between 0.0 and 1.0,
+  "revision_notes": "what changed from Round 1, or the key evidence for the verdict (one or two sentences)"
+}

@@ -1,6 +1,7 @@
 package com.seniorshield.client;
 
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.seniorshield.model.AdResult;
 import com.seniorshield.model.ClassifyResult;
 import com.seniorshield.model.ImageResult;
 import com.seniorshield.model.InfoResult;
@@ -29,19 +30,23 @@ public class AnalyzerClient {
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    public ClassifyResult classify(String subtitleText, String lang) throws Exception {
+    public ClassifyResult classify(String subtitleText, String title, String description, String lang) throws Exception {
         String body = JsonUtil.MAPPER.writeValueAsString(
                 JsonUtil.MAPPER.createObjectNode()
                         .put("subtitle_text", subtitleText)
+                        .put("title",         title != null ? title : "")
+                        .put("description",   description != null ? description : "")
                         .put("lang", lang));
         return post("/classify", body, ClassifyResult.class);
     }
 
-    public InfoResult info(String subtitleText, String category, String lang) throws Exception {
+    public InfoResult info(String keyClaim, String category, String title, String description, String lang) throws Exception {
         String body = JsonUtil.MAPPER.writeValueAsString(
                 JsonUtil.MAPPER.createObjectNode()
-                        .put("subtitle_text", subtitleText)
-                        .put("category", category)
+                        .put("key_claim",   keyClaim != null ? keyClaim : "")
+                        .put("category",    category)
+                        .put("title",       title != null ? title : "")
+                        .put("description", description != null ? description : "")
                         .put("lang", lang));
         return post("/info", body, InfoResult.class);
     }
@@ -54,6 +59,18 @@ public class AnalyzerClient {
                         .put("lang", lang)
                         .set("frames_base64", arr));
         return post("/image", body, ImageResult.class);
+    }
+
+    public AdResult ad(List<String> framesBase64, String subtitleText, String initialLabel, String lang) throws Exception {
+        ArrayNode arr = JsonUtil.MAPPER.createArrayNode();
+        framesBase64.forEach(arr::add);
+        String body = JsonUtil.MAPPER.writeValueAsString(
+                JsonUtil.MAPPER.createObjectNode()
+                        .put("subtitle_text", subtitleText)
+                        .put("initial_label", initialLabel)
+                        .put("lang", lang)
+                        .set("frames_base64", arr));
+        return post("/ad", body, AdResult.class);
     }
 
     public String healthRaw() throws Exception {

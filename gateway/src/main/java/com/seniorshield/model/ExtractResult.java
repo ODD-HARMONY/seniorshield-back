@@ -10,6 +10,7 @@ public class ExtractResult {
     @JsonProperty("video_id")    public String videoId;
     @JsonProperty("duration_sec") public Double durationSec;
     @JsonProperty("title")       public String title;
+    @JsonProperty("description") public String description;
     @JsonProperty("subtitle")    public SubtitleInfo subtitle;
     @JsonProperty("frames")      public FramesInfo frames;
     @JsonProperty("elapsed_ms")  public Object elapsedMs;

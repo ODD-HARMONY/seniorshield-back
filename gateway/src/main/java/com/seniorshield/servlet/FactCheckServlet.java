@@ -25,7 +25,7 @@ public class FactCheckServlet extends HttpServlet {
             JsonNode json = JsonUtil.MAPPER.readTree(
                     req.getReader().lines().collect(Collectors.joining()));
             String claim    = json.path("claim").asText("");
-            String language = json.path("language").asText("ko");
+            String language = json.path("lang").asText("ko");
             FactCheckResult result = client.check(claim, language);
             resp.getWriter().print(JsonUtil.MAPPER.writeValueAsString(result));
         } catch (Exception e) {

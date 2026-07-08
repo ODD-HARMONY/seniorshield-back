@@ -2,8 +2,6 @@ package com.seniorshield.servlet;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.seniorshield.client.AnalyzerClient;
-import com.seniorshield.client.ExtractorClient;
-import com.seniorshield.model.ExtractResult;
 import com.seniorshield.model.InfoResult;
 import com.seniorshield.util.JsonUtil;
 import com.seniorshield.util.UrlValidator;
@@ -19,8 +17,7 @@ import java.util.stream.Collectors;
 @WebServlet("/api/info")
 public class InfoServlet extends HttpServlet {
 
-    private final ExtractorClient extractorClient = new ExtractorClient();
-    private final AnalyzerClient  analyzerClient  = new AnalyzerClient();
+    private final AnalyzerClient analyzerClient = new AnalyzerClient();
 
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
@@ -29,18 +26,12 @@ public class InfoServlet extends HttpServlet {
             JsonNode json = JsonUtil.MAPPER.readTree(
                     req.getReader().lines().collect(Collectors.joining()));
 
-            String subtitleText;
-            String category = json.path("category").asText("other");
-            if (json.has("subtitle_text")) {
-                subtitleText = json.get("subtitle_text").asText();
-            } else {
-                String url = UrlValidator.normalize(json.path("url").asText(""));
-                ExtractResult ex = extractorClient.extract(url, 0, "ko");
-                subtitleText = (ex.subtitle != null && ex.subtitle.available) ? ex.subtitle.text : "";
-            }
-
-            String lang = json.path("lang").asText("ko");
-            InfoResult result = analyzerClient.info(subtitleText, category, lang);
+            String keyClaim  = json.path("key_claim").asText("");
+            String category  = json.path("category").asText("other");
+            String title     = json.path("title").asText(null);
+            String desc      = json.path("description").asText(null);
+            String lang      = json.path("lang").asText("ko");
+            InfoResult result = analyzerClient.info(keyClaim, category, title, desc, lang);
             resp.getWriter().print(JsonUtil.MAPPER.writeValueAsString(result));
         } catch (UrlValidator.InvalidUrlException e) {
             resp.setStatus(400);

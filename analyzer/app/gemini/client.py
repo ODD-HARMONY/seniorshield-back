@@ -22,16 +22,24 @@ def _retry_delay_sec(e: errors.ClientError) -> int:
 
 
 def _with_retry(fn):
-    """429 발생 시 retryDelay만큼 대기 후 1회 재시도."""
-    try:
-        return fn()
-    except errors.ClientError as e:
-        if e.code != 429:
-            raise
-        delay = _retry_delay_sec(e)
-        print(f"[gemini] 429 rate limit — {delay}초 대기 후 재시도", flush=True)
-        time.sleep(delay)
-        return fn()
+    """429/503 발생 시 1회 재시도.
+    - 429: 응답의 retryDelay만큼 대기
+    - 503: 10초 대기
+    """
+    for attempt in range(2):
+        try:
+            return fn()
+        except errors.ClientError as e:
+            if e.code != 429 or attempt >= 1:
+                raise
+            delay = _retry_delay_sec(e)
+            print(f"[gemini] 429 rate limit — {delay}초 대기 후 재시도", flush=True)
+            time.sleep(delay)
+        except errors.ServerError as e:
+            if attempt >= 1:
+                raise
+            print(f"[gemini] 503 서버 과부하 — 10초 대기 후 재시도", flush=True)
+            time.sleep(10)
 
 
 def call_text(model: str, prompt: str, json_mode: bool = True):
@@ -62,6 +70,25 @@ def call_with_grounding(model: str, prompt: str) -> dict:
     except Exception:
         # §15: 그라운딩 미지원 모델·지역이면 일반 호출로 fallback
         return call_text(model, prompt, json_mode=True)
+
+
+def call_multimodal_text(model: str, prompt: str, images_b64: list) -> str:
+    """멀티모달 자유 서술 응답 (JSON 모드 사용 안 함). Round 1 관찰용."""
+    parts = [types.Part.from_text(text=prompt)]
+    for b64 in images_b64:
+        parts.append(types.Part.from_bytes(
+            data=base64.b64decode(b64), mime_type="image/jpeg",
+        ))
+    config = types.GenerateContentConfig(
+        response_mime_type="text/plain",
+        temperature=0.3,
+    )
+    def _call():
+        resp = _client.models.generate_content(
+            model=model, contents=parts, config=config,
+        )
+        return resp.text.strip()
+    return _with_retry(_call)
 
 
 def call_multimodal(model: str, prompt: str, images_b64: list) -> dict:

@@ -9,7 +9,10 @@ router = APIRouter()
 @router.post("/classify", response_model=ClassifyResponse)
 async def classify(req: ClassifyRequest):
     try:
-        result = await asyncio.to_thread(gemini_classify.classify, req.subtitle_text, req.lang)
+        result = await asyncio.to_thread(
+            gemini_classify.classify, req.subtitle_text, req.lang,
+            req.title or "", req.description or ""
+        )
         return ClassifyResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))

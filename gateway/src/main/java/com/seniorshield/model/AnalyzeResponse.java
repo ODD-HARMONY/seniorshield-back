@@ -26,6 +26,7 @@ public class AnalyzeResponse {
         public Advertisement               advertisement;
         @JsonProperty("community_signal")  public CommunitySignal communitySignal;
         @JsonProperty("display_message")   public String          displayMessage;
+        public String                      category;  // classify 카테고리 (health/finance/politics/...)
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -53,7 +54,8 @@ public class AnalyzeResponse {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class Advertisement {
         public boolean applicable;
-        public Double confidence;  // null when not applicable (feature not yet implemented)
+        public String label;       // normal_ad | likely_false_ad | likely_scam
+        public Double confidence;
         public String reason;
     }
 
@@ -62,6 +64,7 @@ public class AnalyzeResponse {
         public String text;
         @JsonProperty("llm_judgement")      public String llmJudgement;
         @JsonProperty("factcheck_matches")  public List<FactCheckResult.Match> factcheckMatches;
+        @JsonProperty("supporting_sources") public List<String> supportingSources;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

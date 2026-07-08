@@ -7,6 +7,7 @@ import com.seniorshield.client.AnalyzerClient;
 import com.seniorshield.client.ExtractorClient;
 import com.seniorshield.client.FactCheckClient;
 import com.seniorshield.model.*;
+import com.seniorshield.model.AdResult;
 import com.seniorshield.util.HashUtil;
 import com.seniorshield.util.JsonUtil;
 import com.seniorshield.util.LangValidator;
@@ -81,6 +82,7 @@ public class AnalysisPipeline {
         AnalyzeResponse.StageStatus sInfo      = new AnalyzeResponse.StageStatus();
         AnalyzeResponse.StageStatus sImage     = new AnalyzeResponse.StageStatus();
         AnalyzeResponse.StageStatus sFactCheck = new AnalyzeResponse.StageStatus();
+        AnalyzeResponse.StageStatus sAdVerify  = new AnalyzeResponse.StageStatus();
         stages.put("extract",   sExtract);
         stages.put("classify",  sClassify);
         stages.put("info",      sInfo);
@@ -131,7 +133,8 @@ public class AnalysisPipeline {
             log.info("No subtitle for job=" + jobId + ", skipping classify");
         } else {
             try {
-                classify = analyzerClient.classify(subtitleText, lang);
+                classify = analyzerClient.classify(subtitleText, extract.title, extract.description, lang);
+
                 sClassify.ok            = true;
                 sClassify.elapsedMs     = System.currentTimeMillis() - t0;
                 sClassify.informational = String.valueOf(classify.informational);
@@ -142,10 +145,31 @@ public class AnalysisPipeline {
             }
         }
 
+        if (classify != null) {
+            if (classify.informational) {
+                log.info("job=" + jobId + " classify: informational=true category=" + classify.category
+                        + " key_topic=" + classify.keyTopic
+                        + " advertisement=" + classify.advertisement + " ad_label=" + classify.adLabel);
+                log.info("job=" + jobId + " key_claim=" + trunc(classify.keyClaim, 150));
+            } else {
+                log.info("job=" + jobId + " classify: informational=false category=" + classify.category
+                        + " advertisement=" + classify.advertisement + " ad_label=" + classify.adLabel);
+            }
+        }
+
         final ClassifyResult classifyF = classify;
         final String langF = lang;
+        final ExtractResult extractF = extract;
 
-        // 3. 이미지 + 정보 분석 병렬
+        // ad_verify 필요 여부: classify가 likely_false_ad 또는 likely_scam으로 판정하고 자막+프레임이 있을 때
+        boolean needsAdVerify = classifyF != null && classifyF.advertisement
+                && ("likely_false_ad".equals(classifyF.adLabel) || "likely_scam".equals(classifyF.adLabel))
+                && !frames.isEmpty() && hasSubtitle;
+        if (needsAdVerify) {
+            stages.put("ad_verify", sAdVerify);
+        }
+
+        // 3. 이미지 + 정보 + 광고검증 병렬
         List<String> framesF = frames;
         CompletableFuture<ImageResult> imageF = CompletableFuture.supplyAsync(() -> {
             long ts = System.currentTimeMillis();
@@ -165,7 +189,7 @@ public class AnalysisPipeline {
                 ? CompletableFuture.supplyAsync(() -> {
                     long ts = System.currentTimeMillis();
                     try {
-                        InfoResult r = analyzerClient.info(subtitleText, classifyF.category, langF);
+                        InfoResult r = analyzerClient.info(classifyF.keyClaim, classifyF.category, extractF.title, extractF.description, langF);
                         sInfo.ok        = true;
                         sInfo.elapsedMs = System.currentTimeMillis() - ts;
                         return r;
@@ -177,8 +201,57 @@ public class AnalysisPipeline {
                 })
                 : CompletableFuture.completedFuture(null);
 
-        ImageResult image = imageF.join();
-        InfoResult  info  = infoF.join();
+        final String subtitleTextF = subtitleText;
+        CompletableFuture<AdResult> adF = needsAdVerify
+                ? CompletableFuture.supplyAsync(() -> {
+                    long ts = System.currentTimeMillis();
+                    try {
+                        AdResult r = analyzerClient.ad(framesF, subtitleTextF, classifyF.adLabel, langF);
+                        sAdVerify.ok        = true;
+                        sAdVerify.elapsedMs = System.currentTimeMillis() - ts;
+                        return r;
+                    } catch (Exception e) {
+                        sAdVerify.ok    = false;
+                        sAdVerify.error = e.getMessage();
+                        log.log(Level.WARNING, "AdVerify failed", e);
+                        return null;
+                    }
+                })
+                : CompletableFuture.completedFuture(null);
+
+        ImageResult image    = imageF.join();
+        InfoResult  info     = infoF.join();
+        AdResult    adResult = adF.join();
+
+        if (info != null) {
+            log.info("job=" + jobId + " info: overall=" + info.overallJudgement
+                    + " confidence=" + info.confidence
+                    + " claims=" + (info.claims != null ? info.claims.size() : 0));
+            if (info.claims != null) {
+                for (int ci = 0; ci < info.claims.size(); ci++) {
+                    InfoResult.Claim c = info.claims.get(ci);
+                    log.info("job=" + jobId + " claim[" + ci + "] judgement=" + c.preliminaryJudgement
+                            + " text=" + trunc(c.text, 120));
+                }
+            }
+        }
+
+        // revision_notes, _internal 로그 기록 후 프론트 응답에서 제거
+        if (image != null) {
+            log.info("job=" + jobId + " image_label=" + image.label
+                    + " confidence=" + image.confidence
+                    + " revision_notes=" + image.revisionNotes);
+            boolean debugMode = "true".equalsIgnoreCase(System.getenv("DEBUG_INCLUDE_INTERNAL"));
+            if (!debugMode) {
+                image.revisionNotes = null;
+                image.internal      = null;
+            }
+        }
+        if (adResult != null) {
+            log.info("job=" + jobId + " ad_label=" + adResult.label
+                    + " ad_confidence=" + adResult.confidence
+                    + " reason=" + adResult.reason);
+        }
         if (!sInfo.ok && classifyF != null && !classifyF.informational) {
             sInfo.ok = true; // 정보성 아닌 경우 info는 skip — ok 처리
         }
@@ -198,10 +271,22 @@ public class AnalysisPipeline {
         sFactCheck.ok        = true;
         sFactCheck.elapsedMs = System.currentTimeMillis() - tsfc;
 
+        for (int fi = 0; fi < facts.size(); fi++) {
+            FactCheckResult fc = facts.get(fi);
+            int matchCount = (fc.matches != null) ? fc.matches.size() : 0;
+            String topRating = (fc.matches != null && !fc.matches.isEmpty())
+                    ? fc.matches.get(0).ratingNormalized : "none";
+            log.info("job=" + jobId + " factcheck[" + fi + "] matches=" + matchCount
+                    + " top_rating=" + topRating
+                    + " lang_used=" + fc.languageUsed
+                    + " fallback=" + fc.fallbackApplied);
+        }
+
         // 5. 통합 + 집단지성 가중치
         int[] voteCounts = voteDao.getCounts(normalizedUrl); // [okCount, suspiciousCount]
-        AnalyzeResponse.Verdict verdict = aggregator.aggregate(classify, info, image, facts, lang);
-        aggregator.applySuspicionWeight(verdict, voteCounts[0], voteCounts[1], lang);
+        AnalyzeResponse.Verdict verdict = aggregator.aggregate(classify, info, image, facts, adResult, lang);
+        String category = (classify != null && classify.category != null) ? classify.category : "";
+        aggregator.applySuspicionWeight(verdict, voteCounts[0], voteCounts[1], category, lang);
 
         // 핵심 단계 실패 시 display_message 재설정 (uncertain 결과를 정상으로 오해하지 않도록)
         boolean classifyFailed = !sClassify.ok;
@@ -223,6 +308,17 @@ public class AnalysisPipeline {
         response.stages         = stages;
         response.elapsedMsTotal = System.currentTimeMillis() - totalStart;
 
+        AnalyzeResponse.Misinformation mis = response.verdict != null ? response.verdict.misinformation : null;
+        AnalyzeResponse.AiGenerated    ag  = response.verdict != null ? response.verdict.aiGenerated    : null;
+        log.info("job=" + jobId + " verdict:"
+                + " ai=" + (ag  != null ? ag.label  + "(" + ag.confidence  + ")" : "n/a")
+                + " misinfo=" + (mis != null && mis.applicable
+                        ? mis.label + "(" + mis.confidence + ")" : "n/a")
+                + " ad=" + (response.verdict != null && response.verdict.advertisement != null
+                        && response.verdict.advertisement.applicable
+                        ? response.verdict.advertisement.label : "n/a")
+                + " elapsed=" + response.elapsedMsTotal + "ms");
+
         // 6. 캐시 저장 — 핵심 단계 실패 시 캐시 저장 건너뜀 (재시도 시 재분석 가능하도록)
         if (!classifyFailed && !imageFailed) {
             try {
@@ -242,5 +338,10 @@ public class AnalysisPipeline {
         r.error  = error;
         r.detail = detail;
         return r;
+    }
+
+    private static String trunc(String s, int max) {
+        if (s == null) return "null";
+        return s.length() <= max ? s : s.substring(0, max) + "…";
     }
 }

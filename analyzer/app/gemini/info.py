@@ -14,11 +14,14 @@ def _prompt_path(lang: str, name: str) -> Path:
     return PROMPTS_ROOT / lang / name
 
 
-def analyze_info(subtitle_text: str, category: str, lang: str = DEFAULT_LANG) -> dict:
+def analyze_info(key_claim: str, category: str, lang: str = DEFAULT_LANG,
+                 title: str = "", description: str = "") -> dict:
     tmpl = _prompt_path(lang, "info_extract.txt").read_text(encoding="utf-8")
     prompt = (
         tmpl
-        .replace("{{SUBTITLE_TEXT}}", subtitle_text)
+        .replace("{{KEY_CLAIM}}", key_claim)
         .replace("{{CATEGORY}}", category)
+        .replace("{{TITLE}}", title or "(없음)")
+        .replace("{{DESCRIPTION}}", description or "(없음)")
     )
     return call_with_grounding(os.environ["MODEL_INFO"], prompt)

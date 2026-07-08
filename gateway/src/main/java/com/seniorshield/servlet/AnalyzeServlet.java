@@ -3,6 +3,7 @@ package com.seniorshield.servlet;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.seniorshield.model.AnalyzeResponse;
 import com.seniorshield.pipeline.AnalysisPipeline;
+import com.seniorshield.pipeline.AnalyzeQueue;
 import com.seniorshield.util.JsonUtil;
 import com.seniorshield.util.LangValidator;
 
@@ -32,7 +33,21 @@ public class AnalyzeServlet extends HttpServlet {
 
         String lang = LangValidator.normalize(json.path("lang").asText(null));
 
-        AnalyzeResponse result = AnalysisPipeline.getInstance().analyze(url, lang);
+        AnalyzeResponse result;
+        try {
+            result = AnalyzeQueue.getInstance().submit(
+                () -> AnalysisPipeline.getInstance().analyze(url, lang)
+            );
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            resp.setStatus(503);
+            writeError(resp, "service_unavailable", "Request interrupted");
+            return;
+        } catch (Exception e) {
+            resp.setStatus(500);
+            writeError(resp, "internal_error", e.getMessage());
+            return;
+        }
         if (result.error != null) {
             resp.setStatus(result.error.equals("invalid_url") ? 400 : 502);
         }
