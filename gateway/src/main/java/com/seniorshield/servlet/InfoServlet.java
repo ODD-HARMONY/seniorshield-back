@@ -26,12 +26,14 @@ public class InfoServlet extends HttpServlet {
             JsonNode json = JsonUtil.MAPPER.readTree(
                     req.getReader().lines().collect(Collectors.joining()));
 
-            String keyClaim  = json.path("key_claim").asText("");
-            String category  = json.path("category").asText("other");
-            String title     = json.path("title").asText(null);
-            String desc      = json.path("description").asText(null);
-            String lang      = json.path("lang").asText("ko");
-            InfoResult result = analyzerClient.info(keyClaim, category, title, desc, lang);
+            String keyClaim          = json.path("key_claim").asText("");
+            String category          = json.path("category").asText("other");
+            String subtitleText      = json.path("subtitle_text").asText("");
+            String title             = json.path("title").asText(null);
+            String desc              = json.path("description").asText(null);
+            String lang              = json.path("lang").asText("ko");
+            String aiScriptLikelihood = json.path("ai_script_likelihood").asText("low");
+            InfoResult result = analyzerClient.info(keyClaim, category, subtitleText, title, desc, lang, aiScriptLikelihood);
             resp.getWriter().print(JsonUtil.MAPPER.writeValueAsString(result));
         } catch (UrlValidator.InvalidUrlException e) {
             resp.setStatus(400);

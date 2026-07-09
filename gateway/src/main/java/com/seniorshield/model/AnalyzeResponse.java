@@ -49,6 +49,8 @@ public class AnalyzeResponse {
         public String label;
         public Double confidence;
         public List<ClaimWithFact> claims;
+        @JsonProperty("pre_r2_label") public String preR2Label;   // R2 발동 전 라벨 (ablation 로깅용)
+        @JsonProperty("rules_fired")  public List<String> rulesFired; // 발동된 규칙 목록
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -65,6 +67,9 @@ public class AnalyzeResponse {
         @JsonProperty("llm_judgement")      public String llmJudgement;
         @JsonProperty("factcheck_matches")  public List<FactCheckResult.Match> factcheckMatches;
         @JsonProperty("supporting_sources") public List<String> supportingSources;
+        @JsonProperty("axis_a_verdict")     public String axisAVerdict;  // R3: 경험적 검증 결과
+        @JsonProperty("axis_b_verdict")     public String axisBVerdict;  // R3: 상식 정합성 결과
+        @JsonProperty("driving_axis")       public String drivingAxis;   // R3: 판정 주도 축 (A|B|combined)
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

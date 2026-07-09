@@ -146,13 +146,16 @@ public class AnalysisPipeline {
         }
 
         if (classify != null) {
+            int claimCount = classify.checkableClaims != null ? classify.checkableClaims.size() : 0;
             if (classify.informational) {
                 log.info("job=" + jobId + " classify: informational=true category=" + classify.category
+                        + " checkable_claims=" + claimCount
                         + " key_topic=" + classify.keyTopic
                         + " advertisement=" + classify.advertisement + " ad_label=" + classify.adLabel);
                 log.info("job=" + jobId + " key_claim=" + trunc(classify.keyClaim, 150));
             } else {
                 log.info("job=" + jobId + " classify: informational=false category=" + classify.category
+                        + " checkable_claims=" + claimCount
                         + " advertisement=" + classify.advertisement + " ad_label=" + classify.adLabel);
             }
         }
@@ -160,6 +163,7 @@ public class AnalysisPipeline {
         final ClassifyResult classifyF = classify;
         final String langF = lang;
         final ExtractResult extractF = extract;
+        final String subtitleTextF = subtitleText;
 
         // ad_verify 필요 여부: classify가 likely_false_ad 또는 likely_scam으로 판정하고 자막+프레임이 있을 때
         boolean needsAdVerify = classifyF != null && classifyF.advertisement
@@ -185,11 +189,19 @@ public class AnalysisPipeline {
             }
         });
 
-        CompletableFuture<InfoResult> infoF = (classifyF != null && classifyF.informational)
+        boolean ranInfo = classifyF != null
+                && (classifyF.informational || classifyF.hasCheckableClaims());
+        if (ranInfo && !classifyF.informational) {
+            int n = classifyF.checkableClaims != null ? classifyF.checkableClaims.size() : 0;
+            log.info("job=" + jobId + " soft-gate triggered: informational=false but checkable_claims=" + n);
+        }
+        CompletableFuture<InfoResult> infoF = ranInfo
                 ? CompletableFuture.supplyAsync(() -> {
                     long ts = System.currentTimeMillis();
                     try {
-                        InfoResult r = analyzerClient.info(classifyF.keyClaim, classifyF.category, extractF.title, extractF.description, langF);
+                        String asl = classifyF.aiScriptLikelihood != null ? classifyF.aiScriptLikelihood : "low";
+                        InfoResult r = analyzerClient.info(classifyF.keyClaim, classifyF.category,
+                                subtitleTextF, extractF.title, extractF.description, langF, asl);
                         sInfo.ok        = true;
                         sInfo.elapsedMs = System.currentTimeMillis() - ts;
                         return r;
@@ -201,7 +213,6 @@ public class AnalysisPipeline {
                 })
                 : CompletableFuture.completedFuture(null);
 
-        final String subtitleTextF = subtitleText;
         CompletableFuture<AdResult> adF = needsAdVerify
                 ? CompletableFuture.supplyAsync(() -> {
                     long ts = System.currentTimeMillis();
@@ -252,8 +263,8 @@ public class AnalysisPipeline {
                     + " ad_confidence=" + adResult.confidence
                     + " reason=" + adResult.reason);
         }
-        if (!sInfo.ok && classifyF != null && !classifyF.informational) {
-            sInfo.ok = true; // 정보성 아닌 경우 info는 skip — ok 처리
+        if (!sInfo.ok && !ranInfo) {
+            sInfo.ok = true; // info skip (soft-gate 미충족) — ok 처리
         }
 
         // 4. 팩트체크 (info.claims 순차 호출, lang 기준 fallback 포함)

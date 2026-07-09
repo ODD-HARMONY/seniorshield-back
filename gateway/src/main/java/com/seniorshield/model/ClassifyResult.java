@@ -3,14 +3,28 @@ package com.seniorshield.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.util.List;
+
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ClassifyResult {
     public boolean informational;
     public String category;
-    @JsonProperty("key_topic") public String keyTopic;
-    @JsonProperty("key_claim") public String keyClaim;
+    @JsonProperty("key_topic")        public String keyTopic;
+    @JsonProperty("key_claim")        public String keyClaim;
     public boolean advertisement;
-    @JsonProperty("ad_label") public String adLabel;  // none | normal_ad | likely_false_ad | likely_scam
+    @JsonProperty("ad_label")         public String adLabel;  // none | normal_ad | likely_false_ad | likely_scam
+    @JsonProperty("checkable_claims")       public List<CheckableClaim> checkableClaims;
+    @JsonProperty("ai_script_likelihood")  public String aiScriptLikelihood = "low"; // low|medium|high
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class CheckableClaim {
+        public String text;
+        public String category;  // health | finance | science | other
+    }
+
+    public boolean hasCheckableClaims() {
+        return checkableClaims != null && !checkableClaims.isEmpty();
+    }
 
     /** Used when subtitle is unavailable — skips classify API call entirely. */
     public static ClassifyResult notApplicable() {

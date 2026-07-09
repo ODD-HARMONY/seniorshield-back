@@ -11,7 +11,8 @@ async def info(req: InfoRequest):
     try:
         result = await asyncio.to_thread(
             gemini_info.analyze_info, req.key_claim, req.category, req.lang,
-            req.title or "", req.description or ""
+            req.title or "", req.description or "",
+            req.subtitle_text or "", req.ai_script_likelihood
         )
         return InfoResponse(**result)
     except Exception as e:

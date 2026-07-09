@@ -9,6 +9,11 @@ class ClassifyRequest(BaseModel):
     lang: str = "ko"
 
 
+class CheckableClaim(BaseModel):
+    text: str
+    category: str  # health | finance | science | other
+
+
 class ClassifyResponse(BaseModel):
     informational: bool
     category: str
@@ -16,13 +21,17 @@ class ClassifyResponse(BaseModel):
     key_claim: str = ""
     advertisement: bool = False
     ad_label: str = "none"  # none | normal_ad | likely_false_ad | likely_scam
+    checkable_claims: List[CheckableClaim] = []
+    ai_script_likelihood: str = "low"  # low | medium | high (자막 문체 기반 AI 스크립트 가능성)
 
 
 class InfoRequest(BaseModel):
     key_claim: str
     category: str = "other"
+    subtitle_text: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
+    ai_script_likelihood: str = "low"  # R3-a: classify가 생성, info로 전달
     lang: str = "ko"
 
 
@@ -31,6 +40,10 @@ class Claim(BaseModel):
     normalized: str
     preliminary_judgement: str
     supporting_sources: List[str] = []
+    # R3 2축 판정 필드 (2axis 프롬프트 사용 시 채워짐)
+    axis_a_verdict: Optional[str] = None  # confirmed|refuted|no_evidence|not_applicable
+    axis_b_verdict: Optional[str] = None  # consensus_ok|consensus_violation|not_applicable
+    driving_axis: Optional[str] = None    # A|B|combined
 
 
 class InfoResponse(BaseModel):

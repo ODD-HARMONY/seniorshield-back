@@ -4,10 +4,32 @@ import com.seniorshield.model.*;
 import com.seniorshield.model.AdResult;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /** §9: 최종 verdict 생성 규칙 */
 public class ResultAggregator {
+
+    // ── R2 설정 (환경변수, 기본값 폴백) ──────────────────────────────────
+    private static final boolean R2_ENABLED = !"false".equalsIgnoreCase(
+            System.getenv("R2_UNCERTAIN_ESCALATION_ENABLED"));
+    private static final double  R2_IMAGE_CONF_THRESHOLD = parseEnvDouble(
+            System.getenv("R2_IMAGE_CONF_THRESHOLD"), 0.50);
+    private static final Set<String> R2_RISK_CATEGORIES = parseEnvSet(
+            System.getenv("R2_RISK_CATEGORIES"), "health,finance,science");
+    private static final boolean R2_ALLOW_FINANCE_CHAIN = !"false".equalsIgnoreCase(
+            System.getenv("R2_ALLOW_FINANCE_CHAIN"));
+
+    private static double parseEnvDouble(String val, double def) {
+        try { return val != null ? Double.parseDouble(val.trim()) : def; }
+        catch (NumberFormatException e) { return def; }
+    }
+    private static Set<String> parseEnvSet(String val, String def) {
+        String csv = (val != null && !val.isBlank()) ? val : def;
+        return new HashSet<>(Arrays.asList(csv.split(",")));
+    }
 
     public AnalyzeResponse.Verdict aggregate(
             ClassifyResult classify,
@@ -25,7 +47,7 @@ public class ResultAggregator {
         String category = (classify != null && classify.category != null) ? classify.category : "";
 
         // §9.2 허위정보 판별
-        v.misinformation = buildMisinformation(classify, info, facts, category);
+        v.misinformation = buildMisinformation(classify, info, facts, category, image);
 
         // §9.3 광고·사기 판별
         v.advertisement = buildAdvertisement(classify, ad);
@@ -73,7 +95,8 @@ public class ResultAggregator {
     }
 
     private AnalyzeResponse.Misinformation buildMisinformation(
-            ClassifyResult classify, InfoResult info, List<FactCheckResult> facts, String category) {
+            ClassifyResult classify, InfoResult info, List<FactCheckResult> facts,
+            String category, ImageResult image) {
 
         AnalyzeResponse.Misinformation m = new AnalyzeResponse.Misinformation();
 
@@ -107,10 +130,31 @@ public class ResultAggregator {
             m.confidence = info.confidence;
         }
 
-        // finance 카테고리: true/likely_true → uncertain 하향 (투자 정보는 확정 불가)
+        // ① finance 하향: true/likely_true → uncertain (투자 정보는 확정 불가)
+        String labelBeforeFinance = m.label;
         if ("finance".equals(category)
                 && ("true".equals(m.label) || "likely_true".equals(m.label))) {
             m.label = "uncertain";
+        }
+
+        // ② R2: AI 영상 + 위험 카테고리 + uncertain → likely_false 상향
+        //    순서 보장: factcheck override(①보다 앞) → finance 하향(위) → R2(여기) → community_signal(applySuspicionWeight)
+        if (R2_ENABLED
+                && image != null && "ai".equals(image.label)
+                && image.confidence >= R2_IMAGE_CONF_THRESHOLD
+                && R2_RISK_CATEGORIES.contains(category)
+                && "uncertain".equals(m.label)) {
+
+            boolean wasFinanceDowngraded = !m.label.equals(labelBeforeFinance); // finance가 label을 바꿨는가
+            if (!wasFinanceDowngraded || R2_ALLOW_FINANCE_CHAIN) {
+                m.preR2Label = labelBeforeFinance;  // 체인 시 원래 라벨(e.g. "true"), 직접 시 "uncertain"
+                m.label      = "likely_false";
+                double cur = m.confidence != null ? m.confidence : 0.5;
+                m.confidence = Math.min(cur, 0.60);
+                if (m.rulesFired == null) m.rulesFired = new ArrayList<>();
+                m.rulesFired.add("R2:ai_risk_uncertain_escalation");
+                if (wasFinanceDowngraded) m.rulesFired.add("R2:finance_chain");
+            }
         }
 
         // claims 빌드
@@ -144,6 +188,9 @@ public class ResultAggregator {
                     ? facts.get(i).matches : List.of();
             cwf.supportingSources = (c.supportingSources != null)
                     ? c.supportingSources.stream().limit(3).collect(java.util.stream.Collectors.toList()) : List.of();
+            cwf.axisAVerdict   = c.axisAVerdict;   // R3: null when 2-axis not used
+            cwf.axisBVerdict   = c.axisBVerdict;
+            cwf.drivingAxis    = c.drivingAxis;
             result.add(cwf);
         }
         return result;

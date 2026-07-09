@@ -40,13 +40,19 @@ public class AnalyzerClient {
         return post("/classify", body, ClassifyResult.class);
     }
 
-    public InfoResult info(String keyClaim, String category, String title, String description, String lang) throws Exception {
+    public InfoResult info(String keyClaim, String category, String subtitleText,
+                          String title, String description, String lang,
+                          String aiScriptLikelihood) throws Exception {
+        String sub = subtitleText != null && subtitleText.length() > 2000
+                ? subtitleText.substring(0, 2000) : (subtitleText != null ? subtitleText : "");
         String body = JsonUtil.MAPPER.writeValueAsString(
                 JsonUtil.MAPPER.createObjectNode()
-                        .put("key_claim",   keyClaim != null ? keyClaim : "")
-                        .put("category",    category)
-                        .put("title",       title != null ? title : "")
-                        .put("description", description != null ? description : "")
+                        .put("key_claim",            keyClaim != null ? keyClaim : "")
+                        .put("category",             category)
+                        .put("subtitle_text",        sub)
+                        .put("title",                title != null ? title : "")
+                        .put("description",          description != null ? description : "")
+                        .put("ai_script_likelihood", aiScriptLikelihood != null ? aiScriptLikelihood : "low")
                         .put("lang", lang));
         return post("/info", body, InfoResult.class);
     }
