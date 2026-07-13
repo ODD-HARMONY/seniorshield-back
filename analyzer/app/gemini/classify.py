@@ -1,7 +1,11 @@
+import logging
 import os
+import time
 from pathlib import Path
 
 from .client import call_text
+
+log = logging.getLogger(__name__)
 
 PROMPTS_ROOT   = Path(__file__).resolve().parents[1] / "prompts"
 SUPPORTED_LANGS = {"ko", "en"}
@@ -21,4 +25,7 @@ def classify(subtitle_text: str, lang: str = DEFAULT_LANG,
               .replace("{{SUBTITLE_TEXT}}", subtitle_text)
               .replace("{{TITLE}}", title or "(없음)")
               .replace("{{DESCRIPTION}}", description or "(없음)"))
-    return call_text(os.environ["MODEL_CLASSIFY"], prompt, json_mode=True)
+    t0 = time.monotonic()
+    result = call_text(os.environ["MODEL_CLASSIFY"], prompt, json_mode=True)
+    log.info("classify elapsed=%dms", int((time.monotonic() - t0) * 1000))
+    return result

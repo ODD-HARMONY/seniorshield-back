@@ -62,8 +62,9 @@ def _parse_vtt(vtt_path: Path) -> Tuple[str, int]:
     seen: set = set()
     lines = []
     for cap in captions:
-        text = re.sub(r"<[^>]+>", "", cap.text).strip()
-        if text and text not in seen:
-            seen.add(text)
-            lines.append(text)
+        for raw_line in cap.text.split("\n"):
+            text = re.sub(r"<[^>]+>", "", raw_line).strip()
+            if text and text not in seen:
+                seen.add(text)
+                lines.append(text)
     return "\n".join(lines), len(captions)

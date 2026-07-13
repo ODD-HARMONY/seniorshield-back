@@ -25,12 +25,41 @@ CRITICAL REVIEW AND FINAL VERDICT.
 1. Modern generators produce very high-quality individual images. Do NOT decide based on
    one feature alone; combine multiple pieces of evidence.
 2. Inpainted (partially edited) videos may lack global artifacts and appear normal overall.
-3. If uncertain, choose `uncertain`. A wrong `ai` verdict is worse than a wrong `real` verdict.
-4. Do NOT mistake mobile camera lens distortion, video compression, low-quality blur, or
-   beauty filters (smooth skin tone) for AI artifacts.
-5. Complex mechanical structures, precise text, and consistent straight-line structures
+3. Do NOT mistake mobile camera lens distortion, video compression, low-quality blur, or
+   beauty filters (smooth skin tone) for AI artifacts. These are evidence of real footage.
+4. Complex mechanical structures, precise text, and consistent straight-line structures
    are strong evidence of real photography.
-6. Do NOT be bound by the tone of stage-1 observation. Assume it may have been biased.
+5. Do NOT be bound by the tone of stage-1 observation. Assume it may have been biased.
+6. Do NOT misread real close-up surfaces as AI. When the camera is close to a person or
+   object and skin or food surfaces fill the frame, their smoothness and uniformity are a
+   natural result of close-up photography and shallow depth-of-field — NOT AI synthesis
+   texture. Skin evened out by broadcast makeup, subjects with lighting and grading applied,
+   and smooth food surfaces in macro shots are all common in real footage. Smoothness alone
+   cannot be used as evidence. Do NOT label a frame `ai` solely because surfaces appear
+   smooth. To classify as `ai`, smoothness MUST be accompanied by at least one of:
+   **anatomical errors (fused/malformed fingers, distorted shapes), boundary synthesis
+   artifacts, or violations of physical laws**.
+7. Do NOT cite lip-sync or audio-visual sync mismatch as AI evidence. The input is a set of
+   equally-spaced static frames, not a continuous video. Whether mouth shape matches speech,
+   and audio-visual sync, cannot be judged from static frames. Differences in mouth shape
+   across frames are a natural product of normal speech movement and the frame-sampling
+   interval — using this as deepfake evidence is prohibited.
+8. Do NOT misread unfamiliar real products or textures as AI. Even if a product has an
+   unusual brand, unusual food processing, or a special colour or coating that looks
+   "unrealistic," do NOT label it `ai` on the basis of unfamiliarity alone — it may actually
+   exist. Also, do NOT mistake compression artifacts and degraded quality from heavily
+   re-edited or spliced footage for AI-generated content.
+
+[Label definitions — use ONLY one of the three values below]
+- `ai`: AI-generated content is confirmed to exist in the frame. Even if small, brief, or
+  in the background — if AI synthesis is present, use `ai`. Illustrations, anime-style, or
+  fantasy AI visuals also count as `ai` regardless of realism.
+- `real`: Confirmed absence of AI synthesis. Low-quality, compressed, or edited real footage
+  is still `real` as long as no AI synthesis is present.
+- `uncertain`: Use ONLY when AI elements are detected but it is genuinely impossible to
+  distinguish whether they are realistic synthesis or degraded real footage. Do NOT use
+  `uncertain` simply because confidence is low — in that case, commit to `ai` or `real`
+  based on available evidence.
 
 [Confidence definition]
 `confidence` represents AI generation likelihood. Closer to 1.0 means more AI-like;
@@ -43,13 +72,13 @@ Output ONLY the JSON below. No other text, no comments, no markdown code blocks.
   "per_frame": [
     {
       "index": 0,
-      "label": "ai | likely_ai | uncertain | likely_real | real",
+      "label": "ai | uncertain | real",
       "confidence": 0.0
     }
   ],
-  "label": "overall label (one of the 5 values)",
+  "label": "overall label (one of: ai | uncertain | real)",
   "confidence": 0.0,
-  "revision_notes": "what you corrected or reinforced from stage 1 (one line, 'none' if nothing)"
+  "revision_notes": "For `real`: which negative anchor applied (e.g. close-up surface, no lip-sync possible, unfamiliar product). For `ai`: which positive evidence confirmed it (anatomical error / boundary artifact / physics violation, etc.). One line."
 }
 
 [Stage-1 observation]

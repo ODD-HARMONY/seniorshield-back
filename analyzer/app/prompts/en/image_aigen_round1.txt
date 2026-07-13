@@ -33,6 +33,14 @@ Describe features observed in the images in natural language across the followin
    - Color palette, lighting, composition
    - Similarity to known generator styles (Sora, Veo, Kling, etc.)
 
+[Static-frame constraints — must be followed]
+- This input consists of static frames extracted from video. Lip-sync and audio-visual
+  synchronisation CANNOT be observed from static frames. Do NOT include these in
+  your observations under any circumstances.
+- If you detect that the frame is a close-up (macro shot) of a face, skin, food, or product,
+  record this explicitly (e.g., "facial close-up", "food macro shot"). This context is
+  used in stage 2 to adjust texture judgments.
+
 [Output format]
 - Do NOT use JSON or markdown. Write in natural language paragraphs.
 - Do NOT declare "AI" or "real" verdicts. Avoid conclusive expressions like "appears to be AI"

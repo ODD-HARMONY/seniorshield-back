@@ -11,6 +11,23 @@ PROMPTS_ROOT    = Path(__file__).resolve().parents[1] / "prompts"
 SUPPORTED_LANGS = {"ko", "en"}
 DEFAULT_LANG    = "ko"
 
+# T3: 3-라벨 체계 플래그 (off 시 5-라벨 동작 유지)
+LABEL_3CLASS_ENABLED = os.environ.get("LABEL_3CLASS_ENABLED", "true").lower() == "true"
+_AI_CONF_THRESHOLD   = float(os.environ.get("AI_CONF_THRESHOLD",   "0.8"))
+_REAL_CONF_THRESHOLD = float(os.environ.get("REAL_CONF_THRESHOLD",  "0.2"))
+_VALID_3CLASS        = {"ai", "uncertain", "real"}
+
+
+def _normalize_label(label: str, confidence: float) -> str:
+    """모델이 구 5-라벨을 반환할 경우 3-라벨로 매핑. 안전 기본값: uncertain."""
+    if label in _VALID_3CLASS:
+        return label
+    if label == "likely_ai":
+        return "ai" if confidence >= _AI_CONF_THRESHOLD else "uncertain"
+    if label == "likely_real":
+        return "real" if confidence <= _REAL_CONF_THRESHOLD else "uncertain"
+    return "uncertain"
+
 
 def _prompt_path(lang: str, name: str) -> Path:
     if lang not in SUPPORTED_LANGS:
@@ -40,6 +57,13 @@ def detect_aigen(frames_b64: list, lang: str = DEFAULT_LANG) -> dict:
     ms2 = int((time.monotonic() - t2) * 1000)
 
     log.info("image round1=%dms round2=%dms total=%dms", ms1, ms2, ms1 + ms2)
+
+    # T3: 3-라벨 정규화 (플래그 on 시)
+    if LABEL_3CLASS_ENABLED:
+        top_conf = result.get("confidence", 0.5)
+        result["label"] = _normalize_label(result.get("label", "uncertain"), top_conf)
+        for pf in result.get("per_frame") or []:
+            pf["label"] = _normalize_label(pf.get("label", "uncertain"), pf.get("confidence", 0.5))
 
     result["_internal"] = {
         "round1_observation": round1_text,

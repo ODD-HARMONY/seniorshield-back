@@ -252,6 +252,16 @@ public class AnalysisPipeline {
             log.info("job=" + jobId + " image_label=" + image.label
                     + " confidence=" + image.confidence
                     + " revision_notes=" + image.revisionNotes);
+            if (image.perFrame != null && !image.perFrame.isEmpty()) {
+                StringBuilder pf = new StringBuilder("job=" + jobId + " per_frame=[");
+                for (int i = 0; i < image.perFrame.size(); i++) {
+                    ImageResult.FrameResult fr = image.perFrame.get(i);
+                    if (i > 0) pf.append(", ");
+                    pf.append(fr.index).append(":").append(fr.label).append(":").append(fr.confidence);
+                }
+                pf.append("]");
+                log.info(pf.toString());
+            }
             boolean debugMode = "true".equalsIgnoreCase(System.getenv("DEBUG_INCLUDE_INTERNAL"));
             if (!debugMode) {
                 image.revisionNotes = null;

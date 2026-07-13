@@ -38,7 +38,7 @@ Android 앱
 │  POST /classify  — 자막 분류 (정보성·광고·사기 판별)      │
 │  POST /info      — 허위정보 분석                         │
 │  POST /image     — AI 생성 여부 판별 (멀티모달 2단계)     │
-│  POST /ad        — 광고·사기 2단계 재검증 (멀티모달)      │
+│  POST /ad        — 광고·사기 재검증 (멀티모달)             │
 │  POST /factcheck — Google Fact Check Tools API 래핑      │
 │  GET  /health    — 헬스체크                              │
 └──────────────────────────────────────────────────────────┘
@@ -121,17 +121,17 @@ YouTube에서 미디어를 추출합니다.
 프레임 이미지로 AI 생성 여부를 2단계로 판별합니다.
 
 - Round 1: 이미지 관찰만 수행 (판정 없음, 자연어 출력)
-- Round 2: Round 1 관찰을 재검토 후 최종 JSON 판정
+- Round 2: Round 1 관찰을 재검토 후 최종 JSON 판정. 라벨은 3-클래스: `ai` / `uncertain` / `real`
+  - `uncertain`은 AI 요소가 감지됐으나 합성인지 열화 실사인지 구분 자체가 불가능한 경우에만 사용
 
 모바일 뷰티 필터·저비트레이트 압축 열화를 AI 증거로 오인하지 않도록 프롬프트에 명시적 주의사항 포함.
 
-**광고·사기 2단계 검증 (`/ad`)**
+**광고·사기 검증 (`/ad`)**
 
 `classify`에서 `likely_false_ad` 또는 `likely_scam`으로 분류된 경우에만 호출됩니다.  
-자막 텍스트와 프레임 이미지를 함께 분석하는 멀티모달 2단계 검증입니다.
+자막 텍스트와 프레임 이미지를 함께 분석하는 단일 패스 멀티모달 검증입니다.
 
-- Round 1: 과장 여부, 출처 신뢰도, 심리적 압박, 결제·연락처 유도, 이미지·자막 일관성 관찰
-- Round 2: Round 1 재검토 후 최종 라벨 결정
+- 과장 여부, 출처 신뢰도, 심리적 압박, 결제·연락처 유도, 이미지·자막 일관성을 5가지 체크리스트로 일괄 평가
 - 결정적 근거 2개 미만이면 반드시 `normal_ad`로 판정 (미확정 원칙)
 
 **팩트체크 (`/factcheck`)**
@@ -226,12 +226,12 @@ POST /api/analyze  { url, lang }
 | 단계 | 중간값 | 평균 | 비고 |
 |------|--------|------|------|
 | extract | ~6.3초 | ~6.4초 | yt-dlp + ffmpeg |
-| classify | ~1.2초 | ~1.2초 | 광고 판별 포함 |
-| info | ~3.2초 | ~3.6초 | image와 병렬 실행, informational=false이면 스킵 |
-| image | ~6.4초 | ~6.8초 | 2단계 멀티모달, 병렬 블록의 병목 |
-| ad_verify | ~2.9초 | ~3.0초 | 조건부 실행, image와 병렬. image보다 짧아 wall-clock에 거의 미영향 |
+| classify | ~1.5초 | ~1.6초 | 광고 판별 포함 |
+| info | ~4.3초 | ~4.5초 | image와 병렬 실행, informational=false이면 스킵 |
+| image | ~5.0초 | ~5.5초 | 2단계 멀티모달 (Round1+Round2), 병렬 블록의 병목 |
+| ad_verify | ~1.8초 | ~2.0초 | 조건부 실행, image와 병렬. image보다 짧아 wall-clock에 거의 미영향 |
 | factcheck | ~2.9초 | ~2.7초 | 주장 수만큼 순차 호출, 주장 없으면 스킵 |
-| **합계 (/api/analyze)** | **~16초** | **~17초** | 캐시 히트 시 <1초 |
+| **합계 (/api/analyze)** | **~15초** | **~16초** | 캐시 히트 시 <1초 |
 
 > image·info·ad_verify가 병렬 처리되므로 전체 소요는 `extract + classify + max(image, info, ad_verify) + factcheck`로 결정됩니다.
 
@@ -329,7 +329,7 @@ seniorShield_back/
 │       │   ├── classify.py
 │       │   ├── info.py
 │       │   ├── image.py
-│       │   └── ad.py           # 광고·사기 2단계 검증
+│       │   └── ad.py           # 광고·사기 검증 (단일 패스)
 │       └── routers/
 │           ├── classify.py
 │           ├── info.py
@@ -353,18 +353,22 @@ seniorShield_back/
 ├── prompts/                    # Gemini 프롬프트 (볼륨 마운트, 재빌드 없이 교체 가능)
 │   ├── ko/                     # 한국어 프롬프트
 │   │   ├── subtitle_classify.txt
-│   │   ├── info_extract.txt
+│   │   ├── info_extract_2axis.txt      # 현행 (R3: 축A·축B 이중 판정)
 │   │   ├── image_aigen_round1.txt
 │   │   ├── image_aigen_round2.txt
-│   │   ├── ad_verify_round1.txt
-│   │   └── ad_verify_round2.txt
-│   └── en/                     # 영어 프롬프트
+│   │   ├── ad_verify.txt
+│   │   ├── info_extract.legacy.txt     # 구버전 (단일 축)
+│   │   ├── ad_verify_round1.legacy.txt # 구버전 (2단계 Round1)
+│   │   └── ad_verify_round2.legacy.txt # 구버전 (2단계 Round2)
+│   └── en/                     # 영어 프롬프트 (ko와 동일 구조)
 │       ├── subtitle_classify.txt
-│       ├── info_extract.txt
+│       ├── info_extract_2axis.txt
 │       ├── image_aigen_round1.txt
 │       ├── image_aigen_round2.txt
-│       ├── ad_verify_round1.txt
-│       └── ad_verify_round2.txt
+│       ├── ad_verify.txt
+│       ├── info_extract.legacy.txt
+│       ├── ad_verify_round1.legacy.txt
+│       └── ad_verify_round2.legacy.txt
 │
 └── docs/
     ├── architecture.md         # 이 문서

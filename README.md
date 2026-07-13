@@ -146,9 +146,9 @@ curl -X POST http://localhost:8080/api/analyze \
   "cached": false,
   "verdict": {
     "ai_generated": {
-      "label": "likely_ai",
+      "label": "ai",
       "confidence": 0.95,
-      "evidence": "..."
+      "evidence": null
     },
     "misinformation": {
       "applicable": true,
@@ -172,7 +172,7 @@ curl -X POST http://localhost:8080/api/analyze \
     "extract":    { "ok": true, "elapsed_ms": 2900 },
     "classify":   { "ok": true, "elapsed_ms": 1200, "informational": "false" },
     "image":      { "ok": true, "elapsed_ms": 8800 },
-    "ad_verify":  { "ok": true, "elapsed_ms": 5400 },
+    "ad_verify":  { "ok": true, "elapsed_ms": 1800 },
     "factcheck":  { "ok": true, "elapsed_ms": 0 }
   },
   "elapsed_ms_total": 18300
@@ -181,7 +181,7 @@ curl -X POST http://localhost:8080/api/analyze \
 
 | `verdict` 필드 | 설명 |
 |----------------|------|
-| `ai_generated.label` | `real` / `likely_real` / `uncertain` / `likely_ai` / `ai` |
+| `ai_generated.label` | `ai` / `uncertain` / `real` |
 | `misinformation.label` | `true` / `likely_true` / `uncertain` / `likely_false` / `false` |
 | `advertisement.label` | `normal_ad` / `likely_false_ad` / `likely_scam`. `applicable: false`이면 필드 없음 |
 | `community_signal.threshold_reached` | `none` / `low` (이상해요 ≥5) / `high` (이상해요 ≥20) |
@@ -294,8 +294,17 @@ curl http://localhost:8080/api/health
 | `EXTRACTOR_TIMEOUT_MS` | `30000` | extract 호출 타임아웃 (ms) |
 | `FACTCHECK_TIMEOUT_MS` | `10000` | factcheck 호출 타임아웃 (ms) |
 | `CACHE_TTL_DAYS` | `14` | 분석 결과 캐시 유지 기간 (일) |
-| `FRAME_COUNT` | `3` | 추출 프레임 수 |
+| `FRAME_COUNT` | `5` | 추출 프레임 수 |
 | `MAX_DURATION_SEC` | `180` | 허용 최대 영상 길이 (초) |
+| `YT_FORMAT` | `bestvideo[width<=720]…` | yt-dlp 비디오 포맷 선택자. 세로형(Shorts) 기준 width≤720 |
+| `LABEL_3CLASS_ENABLED` | `true` | AI 판별 3-클래스 모드 (`ai`/`uncertain`/`real`). `false` 시 구 5-라벨 유지 |
+| `AI_CONF_THRESHOLD` | `0.8` | `likely_ai` → `ai` 매핑 임계값 (`LABEL_3CLASS_ENABLED=true` 시) |
+| `REAL_CONF_THRESHOLD` | `0.2` | `likely_real` → `real` 매핑 임계값 (`LABEL_3CLASS_ENABLED=true` 시) |
+| `R3_TWO_AXIS_ENABLED` | `true` | 허위정보 분석 2축(축A 검색+축B 합의) 사용 여부. `false` 시 단일 축 프롬프트 사용 |
+| `R3_AI_SCRIPT_SIGNAL_ENABLED` | `true` | AI 스크립트 가능성 신호를 info 판정에 반영 여부 |
+| `R2_UNCERTAIN_ESCALATION_ENABLED` | `true` | AI 영상+위험 카테고리+uncertain 조합 시 `likely_false`로 상향 |
+| `R2_IMAGE_CONF_THRESHOLD` | `0.50` | R2 상향 발동 최소 AI 신뢰도 |
+| `R2_RISK_CATEGORIES` | `health,finance,science` | R2 상향 대상 카테고리 (쉼표 구분) |
 
 ---
 

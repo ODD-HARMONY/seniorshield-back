@@ -236,7 +236,7 @@ public class ResultAggregator {
                                 AnalyzeResponse.CommunitySignal cs,
                                 String category,
                                 String lang) {
-        boolean isAi      = ai  != null && (ai.label.equals("ai") || ai.label.equals("likely_ai"));
+        boolean isAi      = ai  != null && ai.label.equals("ai");
         boolean isFalse   = mis != null && mis.applicable
                 && mis.label != null
                 && (mis.label.equals("false") || mis.label.equals("likely_false"));

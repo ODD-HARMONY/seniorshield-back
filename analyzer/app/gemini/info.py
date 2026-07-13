@@ -1,7 +1,11 @@
+import logging
 import os
+import time
 from pathlib import Path
 
 from .client import call_with_grounding
+
+log = logging.getLogger(__name__)
 
 PROMPTS_ROOT    = Path(__file__).resolve().parents[1] / "prompts"
 SUPPORTED_LANGS = {"ko", "en"}
@@ -41,4 +45,7 @@ def analyze_info(key_claim: str, category: str, lang: str = DEFAULT_LANG,
         .replace("{{SUBTITLE_TEXT}}", sub)
         .replace("{{AI_SCRIPT_LIKELIHOOD}}", asl)
     )
-    return call_with_grounding(os.environ["MODEL_INFO"], prompt)
+    t0 = time.monotonic()
+    result = call_with_grounding(os.environ["MODEL_INFO"], prompt)
+    log.info("info elapsed=%dms", int((time.monotonic() - t0) * 1000))
+    return result
